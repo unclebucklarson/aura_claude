@@ -310,6 +310,7 @@ func (l *Lexer) scanToken() {
         case ')':
                 l.parenDepth--
                 if l.parenDepth < 0 {
+                        l.addError("unmatched closing ')'")
                         l.parenDepth = 0
                 }
                 l.emitAt(token.RPAREN, ")", pos)
@@ -319,6 +320,7 @@ func (l *Lexer) scanToken() {
         case ']':
                 l.parenDepth--
                 if l.parenDepth < 0 {
+                        l.addError("unmatched closing ']'")
                         l.parenDepth = 0
                 }
                 l.emitAt(token.RBRACKET, "]", pos)
@@ -328,6 +330,7 @@ func (l *Lexer) scanToken() {
         case '}':
                 l.parenDepth--
                 if l.parenDepth < 0 {
+                        l.addError("unmatched closing '}'")
                         l.parenDepth = 0
                 }
                 l.emitAt(token.RBRACE, "}", pos)

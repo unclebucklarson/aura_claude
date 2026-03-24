@@ -1,9 +1,107 @@
 # AI Next Session - Aura Language
 
-## Status: Phase 3.2 Chunk 2 COMPLETE ✅ — Structured Data Patterns
+---
 
-**Version:** v0.9.0-alpha.2
-**Total Tests:** 963 (all passing)
+## 🔧 Code Quality — Issues Identified 2026-03-23
+
+> Issues found during codebase audit. Address before advancing to Phase 3.2 Chunk 3 or later phases.
+> Priority order: HIGH first, then MEDIUM, then LOW.
+
+### Issue Summary
+
+| # | Severity | Category | Location | Issue | Status |
+|---|----------|----------|----------|-------|--------|
+| 1 | 🔴 HIGH | Correctness | `pkg/interpreter/eval.go` `intPow` | Integer overflow silently corrupts results; negative exponents return `0` with no error | ✅ Fixed |
+| 2 | 🔴 HIGH | Correctness | `pkg/interpreter/eval.go` `evalIndexExpr` | String indexing operates on bytes, not runes — multi-byte UTF-8 characters are mangled | ✅ Fixed |
+| 3 | 🔴 HIGH | Correctness | `pkg/interpreter/eval.go` `evalCallExpr` | Enum variant arity is never checked — `Color.Red(1,2,3)` accepted silently | ✅ Fixed |
+| 4 | 🔴 HIGH | Correctness | `pkg/lexer/lexer.go` | Unmatched closing paren clamps `parenDepth` to 0 silently; no lexer error emitted | ✅ Fixed |
+| 5 | 🔴 HIGH | Correctness | `pkg/interpreter/eval.go` `evalIndexExpr` | Map dot-access returns `NoneVal` for missing keys with no error — hides typos completely | ✅ Fixed |
+| 6 | 🟡 MEDIUM | Architecture | `pkg/interpreter/eval.go`, `env.go` | Inconsistent error strategy: some paths `runtimePanic`, others return `error` — recovery is impossible | ✅ Fixed |
+| 7 | 🟡 MEDIUM | Architecture | `pkg/parser/parser.go` | `blockExprJustEnded bool` can't track nested block expressions — should be a stack | ✅ Fixed |
+| 8 | 🟡 MEDIUM | Semantics | `pkg/interpreter/eval.go` | Refinement types (`Int where x > 0`) parsed and type-checked but never validated at runtime | 📋 Deferred |
+| 9 | 🟡 MEDIUM | Semantics | `pkg/interpreter/eval.go` `evalListComp` | List comprehensions only iterate `ListVal` — `[c for c in "hello"]` panics | ✅ Fixed |
+| 10 | 🔵 LOW | Performance | `pkg/interpreter/eval.go` | `MapVal` uses O(n) linear search with parallel arrays — every lookup scans all keys | ✅ Fixed |
+| 11 | 🔵 LOW | Performance | `pkg/interpreter/eval.go` | String concatenation (`+`) allocates a new string each time — O(n²) in loops | 📋 Documented |
+
+---
+
+### Issue Details
+
+#### Issue 1 — Integer Overflow in `intPow` 🔴
+**File:** `pkg/interpreter/eval.go`
+- `result *= base` and `base *= base` can silently overflow `int64` with no warning
+- `intPow(2, 63)` produces wrong result with no error
+- Negative exponents return `0` — should error or return float
+- **Fix:** Add overflow detection before each multiply; handle negative exponents explicitly
+
+#### Issue 2 — UTF-8 String Indexing 🔴
+**File:** `pkg/interpreter/eval.go`
+- `string[i]` indexes bytes: `string(v.Val[i])` breaks multi-byte characters
+- `"café"[-1]` returns a garbage byte, not `"é"`
+- **Fix:** Decide byte vs rune semantics, convert to `[]rune` for rune-based indexing
+
+#### Issue 3 — Enum Variant Arity Not Checked 🔴
+**File:** `pkg/interpreter/eval.go`
+- Variants map stores arity but it is never compared against `len(args)` at call time
+- `Color.Red(1, 2, 3)` silently creates malformed `EnumVal` with wrong `Data` slice
+- **Fix:** Extract expected arity from variant definition; panic with clear message on mismatch
+
+#### Issue 4 — Unmatched Paren Silently Clamped in Lexer 🔴
+**File:** `pkg/lexer/lexer.go`
+- `l.parenDepth--` followed by `if l.parenDepth < 0 { l.parenDepth = 0 }` emits no error
+- Downstream parser sees wrong NEWLINE/INDENT/DEDENT tokens and fails mysteriously
+- **Fix:** Call `l.addError(...)` before clamping so the user gets a meaningful lexer error
+
+#### Issue 5 — Map Dot-Access Returns `None` Silently 🔴
+**File:** `pkg/interpreter/eval.go`
+- `mymap.missingkey` returns `NoneVal{}` instead of panicking
+- Typos in field names are invisible at runtime
+- **Fix:** Error (or panic) when key is not found and field name is not a known method
+
+#### Issue 6 — Inconsistent Error Handling Strategy 🟡
+**Files:** `pkg/interpreter/eval.go`, `pkg/interpreter/env.go`
+- `eval.go` uses `runtimePanic()` (requires panic recovery to handle)
+- `env.go` returns `error` values
+- Mixing the two makes it impossible to handle errors consistently in calling code
+- **Fix:** Settle on one strategy; returning `(Value, error)` pairs is more testable and composable
+
+#### Issue 7 — `blockExprJustEnded` Boolean Is a Fragile Hack 🟡
+**File:** `pkg/parser/parser.go`
+- Single `bool` cannot correctly track nested block expressions
+- `if ... match ... if ...` can misfire the flag and generate wrong DEDENT handling
+- **Fix:** Replace with a stack (`[]bool`) — push on enter, pop on exit
+
+#### Issue 8 — Refinement Types Not Enforced at Runtime 🟡
+**Files:** `pkg/types/types.go`, `pkg/interpreter/eval.go`
+- `Int where x > 0` is parsed and type-checked but the predicate is never evaluated at runtime
+- A value of `-5` can be assigned to a `PositiveInt` variable with no error
+- **Fix:** Evaluate refinement predicate on assignment; return runtime error if violated
+
+#### Issue 9 — List Comprehensions Don't Support String/Map Iteration 🟡
+**File:** `pkg/interpreter/eval.go` `evalListComp`
+- Comprehension iterator requires `*ListVal`; all other iterables panic
+- `[c for c in "hello"]` and `[k for k in mymap]` both fail
+- For-loops and comprehensions use separate (divergent) iteration logic
+- **Fix:** Extract a shared iterator protocol; reuse it in both for-loops and comprehensions
+
+#### Issue 10 — Map Lookup Is O(n) 🔵
+**File:** `pkg/interpreter/eval.go`
+- `MapVal` stores `Keys []Value` and `Values []Value` as parallel slices
+- Every get/set/has operation calls `Equal(k, index)` in a linear scan
+- **Fix:** Use `map[string]Value` for string-keyed maps; fall back to linear only for non-hashable keys
+
+#### Issue 11 — String Concatenation Is O(n²) 🔵
+**File:** `pkg/interpreter/eval.go`
+- `lv.Val + rv.Val` allocates a new string for every `+` operation
+- `s = s + chunk` in a loop is quadratic
+- **Fix:** Detect chain concatenation and use `strings.Builder`; or document the limitation
+
+---
+
+## Status: Phase 3.2 Chunk 4 COMPLETE ✅ — Exhaustiveness Checking
+
+**Version:** v0.9.0
+**Total Tests:** 994 (all passing)
 **Date:** 2026-03-23
 
 ---
@@ -73,15 +171,15 @@ Standard Library Modules (17 total):
 
 | Package | Tests | Coverage |
 |---------|-------|----------|
-| pkg/checker | 49 | Type checking, effects, specs |
+| pkg/checker | 61 | Type checking, effects, specs, exhaustiveness |
 | pkg/formatter | 9 | Round-trip formatting |
 | pkg/lexer | 11 | Tokenization |
 | pkg/module | 17 | Module resolution |
 | pkg/parser | 16 | All language constructs |
 | pkg/symbols | 9 | Symbol table, scopes |
 | pkg/types | 26 | Type system, subtyping |
-| pkg/interpreter | 830 | Full runtime + stdlib + effects + tuples + match expr + structured patterns |
-| **Total** | **963** | **All passing** |
+| pkg/interpreter | 845 | Full runtime + stdlib + effects + tuples + match expr + structured patterns + guards/or-patterns/as |
+| **Total** | **994** | **All passing** |
 
 ---
 
@@ -171,14 +269,10 @@ Standard Library Modules (17 total):
 
 ---
 
-## 🚀 NEXT PRIORITY — Phase 3.2 Chunk 3: Guard Clauses, Or-patterns, Binding Patterns
+## ✅ COMPLETE — Phase 3.2 Chunk 3: Guard Clauses, Or-patterns, Binding Patterns
 
-> **⚡ START HERE for the next session.**
->
-> Chunk 2 complete. Main is clean with 963 tests passing on v0.9.0-alpha.2.
-> Chunk 3 adds guard clauses, or-patterns, and binding patterns.
->
-> **Planning document:** `/home/ubuntu/phase_3_2_plan.md`
+> Completed 2026-03-23. 982 tests passing on v0.9.0-alpha.3.
+> Guard clauses (`if`), or-patterns (`|`), and binding patterns (`as`) all implemented.
 
 ### Phase 3.2 Remaining Chunks
 
@@ -186,10 +280,43 @@ Standard Library Modules (17 total):
 |-------|-------|--------|-------|--------|
 | **1** | Core infrastructure + Literal/Variable/Wildcard patterns | 3–4 days | 25 | ✅ DONE |
 | **2** | Tuple, List & Constructor patterns + Spread | 3–4 days | 33 | ✅ DONE |
-| **3** | Guard clauses, Or-patterns, Binding patterns | 2–3 days | ~15–20 | ⬅️ NEXT |
-| **4** | Exhaustiveness checking & documentation | 3–4 days | ~15–20 | Pending |
+| **3** | Guard clauses, Or-patterns, Binding patterns | 2–3 days | 19 | ✅ DONE |
+| **4** | Exhaustiveness checking | 1 day | 12 | ✅ DONE |
 
-### Target: v0.9.0, ~1,000+ total tests
+### Phase 3.2 COMPLETE — v0.9.0, 994 total tests
+
+---
+
+## ✅ COMPLETE — Phase 3.2 Chunk 4: Exhaustiveness Checking
+
+> Completed 2026-03-23. 994 tests passing on v0.9.0.
+
+### What Was Delivered (Chunk 4)
+- [x] `patternCoversVariants()` — recursive helper, handles OrPattern + AsPattern
+- [x] `patternCoversBoolLiterals()` — recursive helper for Bool exhaustiveness
+- [x] Refactored `checkEnumExhaustiveness` to use `patternCoversVariants`
+- [x] `checkBoolExhaustivenessPats()` — shared Bool checker for stmt + expr forms
+- [x] `inferMatchExpr()` — full type inference for match expressions with exhaustiveness
+- [x] `checkMatchExprEnumExhaustiveness()` — exhaustiveness for expression form
+- [x] `*ast.MatchExpr` case wired into `inferExpr` switch
+- [x] Bool exhaustiveness added to `checkMatchStmt`
+- [x] 12 new checker tests in `match_exhaustiveness_test.go`
+- [x] Guard type checking (guard must be Bool) in both stmt + expr forms
+
+### Files Changed
+| File | Action |
+|------|--------|
+| `pkg/checker/checker.go` | Added 6 new functions/methods; wired MatchExpr into inferExpr; added bool exhaustiveness to checkMatchStmt |
+| `pkg/checker/match_exhaustiveness_test.go` | **NEW** — 12 exhaustiveness tests |
+
+---
+
+## 🚀 NEXT PRIORITY — Phase 3.3: Advanced Type Features
+
+> **⚡ START HERE for the next session.**
+>
+> Phase 3.2 complete. Main is clean with 994 tests passing on v0.9.0.
+> Phase 3.3 advances the type system with generics, type inference, and interfaces.
 
 ---
 

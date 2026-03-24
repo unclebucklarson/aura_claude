@@ -16,7 +16,7 @@ type Parser struct {
         pos                int
         file               string
         errors             []Error
-        blockExprJustEnded bool // set when a block expression (e.g. match expr) just consumed its DEDENT
+        blockExprDepth int // counts pending block-expression DEDENT terminators already consumed
 }
 
 // Error represents a parser error.
@@ -115,8 +115,8 @@ func (p *Parser) skipNewlines() {
 }
 
 func (p *Parser) expectNewline() {
-        if p.blockExprJustEnded {
-                p.blockExprJustEnded = false
+        if p.blockExprDepth > 0 {
+                p.blockExprDepth--
                 return // block expression already consumed its terminator
         }
         if p.check(token.NEWLINE) {
@@ -1226,7 +1226,7 @@ func (p *Parser) parseMatchStmtOrExpr() ast.Statement {
         // Save position to peek ahead
         saved := p.pos
         savedErrors := len(p.errors)
-        savedBlockExpr := p.blockExprJustEnded
+        savedDepth := p.blockExprDepth
         p.advance() // consume 'match'
 
         // Skip the subject expression tokens until we hit ':'
@@ -1266,7 +1266,7 @@ func (p *Parser) parseMatchStmtOrExpr() ast.Statement {
         // Restore position
         p.pos = saved
         p.errors = p.errors[:savedErrors]
-        p.blockExprJustEnded = savedBlockExpr
+        p.blockExprDepth = savedDepth
 
         if isStmt {
                 return p.parseMatchStmt()
@@ -1455,7 +1455,35 @@ func (p *Parser) parseExprOrAssignStmt() ast.Statement {
 
 // --- Patterns ---
 
+// parsePattern parses a full pattern including or-alternatives (|) and as-bindings.
 func (p *Parser) parsePattern() ast.Pattern {
+        start := p.current().Pos
+        left := p.parsePrimaryPattern()
+
+        // Or-pattern: left | right  (right-associative; all on one line)
+        for p.check(token.PIPE) {
+                p.advance()
+                right := p.parsePrimaryPattern()
+                left = &ast.OrPattern{Span: p.makeSpan(start), Left: left, Right: right}
+        }
+
+        // Binding: pattern as name  (lowest precedence)
+        if p.check(token.AS) {
+                p.advance()
+                if !p.check(token.IDENT) {
+                        p.addError("expected identifier after 'as' in pattern binding")
+                        return left
+                }
+                name := p.current().Literal
+                p.advance()
+                return &ast.AsPattern{Span: p.makeSpan(start), SubPattern: left, Name: name}
+        }
+
+        return left
+}
+
+// parsePrimaryPattern parses a single atomic pattern (no or / as).
+func (p *Parser) parsePrimaryPattern() ast.Pattern {
         start := p.current().Pos
 
         // Wildcard
@@ -1978,11 +2006,18 @@ func (p *Parser) parseMatchExpr() ast.Expr {
                 }
                 armStart := p.current().Pos
                 pattern := p.parsePattern()
+                // Optional guard: pattern if <expr> ->
+                var guard ast.Expr
+                if p.check(token.IF) {
+                        p.advance()
+                        guard = p.parseExpr()
+                }
                 p.expect(token.ARROW)
                 body := p.parseExpr()
                 arms = append(arms, &ast.MatchArm{
                         Span:    p.makeSpan(armStart),
                         Pattern: pattern,
+                        Guard:   guard,
                         Body:    body,
                 })
                 // Consume newline after arm if present
@@ -1994,7 +2029,7 @@ func (p *Parser) parseMatchExpr() ast.Expr {
         // statement doesn't need an explicit newline terminator.
         if p.check(token.DEDENT) {
                 p.advance()
-                p.blockExprJustEnded = true
+                p.blockExprDepth++
         }
 
         return &ast.MatchExpr{

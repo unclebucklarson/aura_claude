@@ -641,7 +641,75 @@ func (c *Checker) checkMatchStmt(s *ast.MatchStmt) {
                                 c.checkEnumExhaustiveness(s, base)
                         }
                 }
+                // Check bool exhaustiveness
+                if underlying != nil && underlying.Kind == types.KindPrimitive && underlying.Name == "Bool" {
+                        pats := make([]ast.Pattern, len(s.Cases))
+                        for i, cs := range s.Cases {
+                                pats[i] = cs.Pattern
+                        }
+                        c.checkBoolExhaustivenessPats(s.Subject.GetSpan(), pats, "case")
+                }
         }
+}
+
+// patternCoversVariants returns the set of enum variant names covered by a
+// pattern, plus a flag indicating whether the pattern acts as a wildcard.
+// Handles OrPattern (merges both sides) and AsPattern (delegates to sub-pattern).
+func patternCoversVariants(p ast.Pattern) (covered map[string]bool, isWildcard bool) {
+        covered = make(map[string]bool)
+        switch pat := p.(type) {
+        case *ast.WildcardPattern:
+                isWildcard = true
+        case *ast.BindingPattern:
+                isWildcard = true
+        case *ast.ConstructorPattern:
+                name := pat.TypeName
+                parts := strings.Split(name, ".")
+                if len(parts) == 2 {
+                        name = parts[1]
+                }
+                covered[name] = true
+        case *ast.OrPattern:
+                lc, lw := patternCoversVariants(pat.Left)
+                rc, rw := patternCoversVariants(pat.Right)
+                isWildcard = lw || rw
+                for k := range lc {
+                        covered[k] = true
+                }
+                for k := range rc {
+                        covered[k] = true
+                }
+        case *ast.AsPattern:
+                return patternCoversVariants(pat.SubPattern)
+        }
+        return
+}
+
+// patternCoversBoolLiterals reports which bool literals a pattern covers.
+func patternCoversBoolLiterals(p ast.Pattern) (coveredTrue, coveredFalse, isWildcard bool) {
+        switch pat := p.(type) {
+        case *ast.WildcardPattern:
+                isWildcard = true
+        case *ast.BindingPattern:
+                isWildcard = true
+        case *ast.LiteralPattern:
+                if pat.Kind == token.BOOL_LIT {
+                        if pat.Value == "true" {
+                                coveredTrue = true
+                        } else {
+                                coveredFalse = true
+                        }
+                }
+        case *ast.OrPattern:
+                lt, lf, lw := patternCoversBoolLiterals(pat.Left)
+                rt, rf, rw := patternCoversBoolLiterals(pat.Right)
+                coveredTrue = lt || rt
+                coveredFalse = lf || rf
+                isWildcard = lw || rw
+        case *ast.AsPattern:
+                return patternCoversBoolLiterals(pat.SubPattern)
+        }
+        return
 }
 
 func (c *Checker) checkEnumExhaustiveness(s *ast.MatchStmt, enumType *types.Type) {
@@ -649,20 +717,12 @@ func (c *Checker) checkEnumExhaustiveness(s *ast.MatchStmt, enumType *types.Type
         hasWildcard := false
 
         for _, cs := range s.Cases {
-                switch p := cs.Pattern.(type) {
-                case *ast.WildcardPattern:
+                vc, wild := patternCoversVariants(cs.Pattern)
+                if wild {
                         hasWildcard = true
-                case *ast.ConstructorPattern:
-                        // Handle dotted names like "TaskError.NotFound"
-                        name := p.TypeName
-                        parts := strings.Split(name, ".")
-                        if len(parts) == 2 {
-                                name = parts[1]
-                        }
-                        covered[name] = true
-                case *ast.BindingPattern:
-                        // A binding pattern acts as wildcard
-                        hasWildcard = true
+                }
+                for k := range vc {
+                        covered[k] = true
                 }
         }
 
@@ -682,6 +742,113 @@ func (c *Checker) checkEnumExhaustiveness(s *ast.MatchStmt, enumType *types.Type
                         fmt.Sprintf("non-exhaustive match: missing variants: %s",
                                 strings.Join(missing, ", "))).
                         withFix(fmt.Sprintf("Add case clauses for: %s, or add a wildcard '_' case",
+                                strings.Join(missing, ", "))))
+        }
+}
+
+// checkBoolExhaustivenessPats checks that a slice of patterns exhaustively covers Bool.
+func (c *Checker) checkBoolExhaustivenessPats(span token.Span, patterns []ast.Pattern, clauseWord string) {
+        covTrue, covFalse, hasWildcard := false, false, false
+        for _, p := range patterns {
+                t, f, w := patternCoversBoolLiterals(p)
+                covTrue = covTrue || t
+                covFalse = covFalse || f
+                hasWildcard = hasWildcard || w
+        }
+        if hasWildcard || (covTrue && covFalse) {
+                return
+        }
+        missing := []string{}
+        if !covTrue {
+                missing = append(missing, "true")
+        }
+        if !covFalse {
+                missing = append(missing, "false")
+        }
+        c.addError(newError(ErrNonExhaustive, span,
+                fmt.Sprintf("non-exhaustive match on Bool: missing %s", strings.Join(missing, ", "))).
+                withFix(fmt.Sprintf("Add %s for: %s, or add a wildcard '_' %s",
+                        clauseWord, strings.Join(missing, ", "), clauseWord)))
+}
+
+// inferMatchExpr type-checks a match expression (arrow form) and returns its result type.
+func (c *Checker) inferMatchExpr(m *ast.MatchExpr) *types.Type {
+        subjectType := c.inferExpr(m.Subject)
+
+        var resultType *types.Type
+        for _, arm := range m.Arms {
+                c.symTable.PushScope(symbols.ScopeBlock, "match_arm")
+                c.checkPattern(arm.Pattern, subjectType)
+                if arm.Guard != nil {
+                        guardType := c.inferExpr(arm.Guard)
+                        if guardType != nil && !types.IsAssignableTo(guardType, types.BuiltinBool) {
+                                c.addError(newError(ErrTypeMismatch, arm.Guard.GetSpan(),
+                                        "match guard must be Bool"))
+                        }
+                }
+                armType := c.inferExpr(arm.Body)
+                if resultType == nil {
+                        resultType = armType
+                }
+                c.symTable.PopScope()
+        }
+
+        // Exhaustiveness checking
+        if subjectType != nil {
+                underlying := types.Underlying(subjectType)
+                if underlying != nil {
+                        switch underlying.Kind {
+                        case types.KindEnum:
+                                c.checkMatchExprEnumExhaustiveness(m, underlying)
+                        case types.KindPrimitive:
+                                if underlying.Name == "Bool" {
+                                        pats := make([]ast.Pattern, len(m.Arms))
+                                        for i, arm := range m.Arms {
+                                                pats[i] = arm.Pattern
+                                        }
+                                        c.checkBoolExhaustivenessPats(m.Span, pats, "arm")
+                                }
+                        }
+                }
+        }
+
+        if resultType == nil {
+                return types.BuiltinAny
+        }
+        return resultType
+}
+
+// checkMatchExprEnumExhaustiveness checks that a match expression covers all enum variants.
+func (c *Checker) checkMatchExprEnumExhaustiveness(m *ast.MatchExpr, enumType *types.Type) {
+        covered := make(map[string]bool)
+        hasWildcard := false
+
+        for _, arm := range m.Arms {
+                vc, wild := patternCoversVariants(arm.Pattern)
+                if wild {
+                        hasWildcard = true
+                }
+                for k := range vc {
+                        covered[k] = true
+                }
+        }
+
+        if hasWildcard {
+                return
+        }
+
+        missing := []string{}
+        for _, v := range enumType.Variants {
+                if !covered[v.Name] {
+                        missing = append(missing, v.Name)
+                }
+        }
+
+        if len(missing) > 0 {
+                c.addError(newError(ErrNonExhaustive, m.Span,
+                        fmt.Sprintf("non-exhaustive match: missing variants: %s",
+                                strings.Join(missing, ", "))).
+                        withFix(fmt.Sprintf("Add arms for: %s, or add a wildcard '_' arm",
                                 strings.Join(missing, ", "))))
         }
 }
@@ -874,6 +1041,8 @@ func (c *Checker) inferExpr(expr ast.Expr) *types.Type {
                 return c.inferStructExpr(e)
         case *ast.IfExpr:
                 return c.inferIfExpr(e)
+        case *ast.MatchExpr:
+                return c.inferMatchExpr(e)
         case *ast.Lambda:
                 return c.inferLambda(e)
         case *ast.OptionPropagate:

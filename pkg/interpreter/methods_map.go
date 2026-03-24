@@ -7,13 +7,13 @@ func init() {
 }
 
 // mapFindKey returns the index of a key in a MapVal, or -1 if not found.
+// Delegates to MapVal.find() which uses O(1) string-key cache when available.
 func mapFindKey(m *MapVal, key Value) int {
-	for i, k := range m.Keys {
-		if Equal(k, key) {
-			return i
-		}
+	i, found := m.find(key)
+	if !found {
+		return -1
 	}
-	return -1
+	return i
 }
 
 func registerMapMethods() {
@@ -153,6 +153,7 @@ func registerMapMethods() {
 		} else {
 			m.Keys = append(m.Keys, args[0])
 			m.Values = append(m.Values, args[1])
+			m.invalidateIndex()
 		}
 		return &NoneVal{}
 	})
@@ -171,6 +172,7 @@ func registerMapMethods() {
 		// Remove by shifting (preserves insertion order)
 		m.Keys = append(m.Keys[:idx], m.Keys[idx+1:]...)
 		m.Values = append(m.Values[:idx], m.Values[idx+1:]...)
+		m.invalidateIndex()
 		return &OptionVal{IsSome: true, Val: removed}
 	})
 
@@ -186,6 +188,7 @@ func registerMapMethods() {
 		}
 		m.Keys = append(m.Keys[:idx], m.Keys[idx+1:]...)
 		m.Values = append(m.Values[:idx], m.Values[idx+1:]...)
+		m.invalidateIndex()
 		return &BoolVal{Val: true}
 	})
 
@@ -194,6 +197,7 @@ func registerMapMethods() {
 		m := receiver.(*MapVal)
 		m.Keys = nil
 		m.Values = nil
+		m.invalidateIndex()
 		return &NoneVal{}
 	})
 
@@ -217,6 +221,7 @@ func registerMapMethods() {
 				m.Values = append(m.Values, other.Values[i])
 			}
 		}
+		m.invalidateIndex()
 		return &NoneVal{}
 	})
 

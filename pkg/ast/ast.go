@@ -959,6 +959,30 @@ func (n *SpreadPattern) nodeType() string    { return "SpreadPattern" }
 func (n *SpreadPattern) GetSpan() token.Span { return n.Span }
 func (n *SpreadPattern) isPattern()          {}
 
+// OrPattern represents "pattern | pattern" — matches either alternative.
+// All alternatives should bind the same variable names for well-formed code.
+type OrPattern struct {
+        Span  token.Span
+        Left  Pattern
+        Right Pattern
+}
+
+func (n *OrPattern) nodeType() string    { return "OrPattern" }
+func (n *OrPattern) GetSpan() token.Span { return n.Span }
+func (n *OrPattern) isPattern()          {}
+
+// AsPattern represents "pattern as name" — matches the sub-pattern and also
+// binds the entire matched value to name.
+type AsPattern struct {
+        Span       token.Span
+        SubPattern Pattern
+        Name       string
+}
+
+func (n *AsPattern) nodeType() string    { return "AsPattern" }
+func (n *AsPattern) GetSpan() token.Span { return n.Span }
+func (n *AsPattern) isPattern()          {}
+
 // --- Match Expression ---
 
 // MatchExpr represents a match expression: match value: pattern -> expr, ...
@@ -973,9 +997,10 @@ func (n *MatchExpr) nodeType() string    { return "MatchExpr" }
 func (n *MatchExpr) GetSpan() token.Span { return n.Span }
 func (n *MatchExpr) isExpr()             {}
 
-// MatchArm represents a single arm in a match expression: pattern -> expr
+// MatchArm represents a single arm in a match expression: pattern [if guard] -> expr
 type MatchArm struct {
         Span    token.Span
         Pattern Pattern
+        Guard   Expr // optional guard expression (nil if no guard)
         Body    Expr
 }

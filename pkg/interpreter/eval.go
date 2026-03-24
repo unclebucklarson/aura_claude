@@ -34,6 +34,14 @@ func runtimePanic(span token.Span, format string, args ...interface{}) {
         panic(&RuntimeError{Message: fmt.Sprintf(format, args...), Span: span})
 }
 
+// mustSet assigns to an existing variable, converting env errors into runtimePanic.
+// Use this instead of calling env.Set directly so callers cannot accidentally ignore the error.
+func mustSet(span token.Span, env *Environment, name string, val Value) {
+        if err := env.Set(name, val); err != nil {
+                runtimePanic(span, "%s", err.Error())
+        }
+}
+
 // --- Evaluator ---
 
 // EvalExpr evaluates an expression and returns a Value.
@@ -217,6 +225,8 @@ func evalAdd(e *ast.BinaryOp, left, right Value) Value {
                 }
         case *StringVal:
                 if rv, ok := right.(*StringVal); ok {
+                        // NOTE: each + allocates a new string. For building large strings in a loop,
+                        // use string.join(parts, "") from the stdlib to avoid O(n²) allocation.
                         return &StringVal{Val: lv.Val + rv.Val}
                 }
         case *ListVal:
@@ -302,7 +312,7 @@ func evalPow(e *ast.BinaryOp, left, right Value) Value {
         case *IntVal:
                 switch rv := right.(type) {
                 case *IntVal:
-                        return &IntVal{Val: intPow(lv.Val, rv.Val)}
+                        return &IntVal{Val: intPow(e.Span, lv.Val, rv.Val)}
                 case *FloatVal:
                         return &FloatVal{Val: math.Pow(float64(lv.Val), rv.Val)}
                 }
@@ -318,17 +328,36 @@ func evalPow(e *ast.BinaryOp, left, right Value) Value {
         return nil
 }
 
-func intPow(base, exp int64) int64 {
+// mulOverflows reports whether a*b overflows int64.
+func mulOverflows(a, b int64) bool {
+        if a == 0 || b == 0 {
+                return false
+        }
+        result := a * b
+        return result/b != a
+}
+
+func intPow(span token.Span, base, exp int64) int64 {
         if exp < 0 {
-                return 0
+                runtimePanic(span, "integer exponentiation does not support negative exponents; convert to Float first (e.g. float(base) ** exp)")
         }
         result := int64(1)
-        for exp > 0 {
-                if exp%2 == 1 {
-                        result *= base
+        b := base
+        e := exp
+        for e > 0 {
+                if e%2 == 1 {
+                        if mulOverflows(result, b) {
+                                runtimePanic(span, "integer overflow in ** operation")
+                        }
+                        result *= b
                 }
-                base *= base
-                exp /= 2
+                e /= 2
+                if e > 0 {
+                        if mulOverflows(b, b) {
+                                runtimePanic(span, "integer overflow in ** operation")
+                        }
+                        b *= b
+                }
         }
         return result
 }
@@ -419,8 +448,11 @@ func evalCallExpr(e *ast.CallExpr, env *Environment) Value {
         if fa, ok := e.Callee.(*ast.FieldAccess); ok {
                 if ident, ok := fa.Object.(*ast.Identifier); ok {
                         if variants, found := env.GetEnumDef(ident.Name); found {
-                                if _, variantExists := variants[fa.Field]; variantExists {
+                                if arity, variantExists := variants[fa.Field]; variantExists {
                                         args := evalArgs(e.Args, env)
+                                        if len(args) != arity {
+                                                runtimePanic(e.Span, "enum variant '%s.%s' expects %d argument(s), got %d", ident.Name, fa.Field, arity, len(args))
+                                        }
                                         return &EnumVal{
                                                 TypeName:    ident.Name,
                                                 VariantName: fa.Field,
@@ -561,16 +593,14 @@ func evalFieldAccess(e *ast.FieldAccess, env *Environment) Value {
         case *MapVal:
                 // Map field access (dot notation for string keys)
                 key := &StringVal{Val: e.Field}
-                for i, k := range v.Keys {
-                        if Equal(k, key) {
-                                return v.Values[i]
-                        }
+                if i, found := v.find(key); found {
+                        return v.Values[i]
                 }
                 // Fall through to method registry for map methods
                 if m := resolveMethod(obj, e.Field); m != nil {
                         return m
                 }
-                return &NoneVal{}
+                runtimePanic(e.Span, "map has no key '%s'", e.Field)
         default:
                 // Use the method registry for all other types
                 if m := resolveMethod(obj, e.Field); m != nil {
@@ -608,10 +638,8 @@ func evalOptionalFieldAccess(e *ast.OptionalFieldAccess, env *Environment) Value
                 return val
         case *MapVal:
                 key := &StringVal{Val: e.Field}
-                for i, k := range v.Keys {
-                        if Equal(k, key) {
-                                return v.Values[i]
-                        }
+                if i, found := v.find(key); found {
+                        return v.Values[i]
                 }
                 return &NoneVal{}
         case *NoneVal:
@@ -647,10 +675,8 @@ func evalIndexExpr(e *ast.IndexExpr, env *Environment) Value {
                 }
                 return v.Elements[i]
         case *MapVal:
-                for i, k := range v.Keys {
-                        if Equal(k, index) {
-                                return v.Values[i]
-                        }
+                if i, found := v.find(index); found {
+                        return v.Values[i]
                 }
                 return &NoneVal{}
         case *TupleVal:
@@ -668,14 +694,15 @@ func evalIndexExpr(e *ast.IndexExpr, env *Environment) Value {
                 if !ok {
                         runtimePanic(e.Span, "string index must be an integer")
                 }
+                runes := []rune(v.Val)
                 i := idx.Val
                 if i < 0 {
-                        i = int64(len(v.Val)) + i
+                        i = int64(len(runes)) + i
                 }
-                if i < 0 || i >= int64(len(v.Val)) {
-                        runtimePanic(e.Span, "index %d out of bounds for string of length %d", idx.Val, len(v.Val))
+                if i < 0 || i >= int64(len(runes)) {
+                        runtimePanic(e.Span, "index %d out of bounds for string of length %d", idx.Val, len(runes))
                 }
-                return &StringVal{Val: string(v.Val[i])}
+                return &StringVal{Val: string(runes[i])}
         default:
                 runtimePanic(e.Span, "cannot index into %s", valueTypeNames[obj.Type()])
         }
@@ -766,15 +793,40 @@ func evalIfExpr(e *ast.IfExpr, env *Environment) Value {
         return &NoneVal{}
 }
 
+// collectIterableItems extracts the iteration elements from any iterable value.
+// For strings, each rune is yielded as a single-character StringVal.
+// For maps, the keys are yielded (insertion order).
+// This is the single source of truth for iteration semantics shared by for-loops
+// and list comprehensions.
+func collectIterableItems(span token.Span, iterable Value) []Value {
+        switch v := iterable.(type) {
+        case *ListVal:
+                return v.Elements
+        case *TupleVal:
+                return v.Elements
+        case *SetVal:
+                return v.Elements
+        case *MapVal:
+                return v.Keys
+        case *StringVal:
+                runes := []rune(v.Val)
+                items := make([]Value, len(runes))
+                for i, r := range runes {
+                        items[i] = &StringVal{Val: string(r)}
+                }
+                return items
+        default:
+                runtimePanic(span, "cannot iterate over %s", valueTypeNames[iterable.Type()])
+                return nil
+        }
+}
+
 func evalListComp(e *ast.ListComp, env *Environment) Value {
         iterable := EvalExpr(e.Iterable, env)
-        list, ok := iterable.(*ListVal)
-        if !ok {
-                runtimePanic(e.Span, "list comprehension requires a list, got %s", valueTypeNames[iterable.Type()])
-        }
+        items := collectIterableItems(e.Span, iterable)
 
-        result := make([]Value, 0)
-        for _, elem := range list.Elements {
+        result := make([]Value, 0, len(items))
+        for _, elem := range items {
                 compEnv := NewEnclosedEnvironment(env)
                 compEnv.Define(e.Variable, elem)
 
@@ -854,6 +906,13 @@ func ExecStmt(stmt ast.Statement, env *Environment) Value {
 
 func execLetStmt(s *ast.LetStmt, env *Environment) Value {
         val := EvalExpr(s.Value, env)
+        // TODO(refinement-runtime): s.TypeHint may carry a refinement predicate (e.g. "Int where x > 0").
+        // To enforce it here we need the predicate stored as a parsed ast.Expr, not the current string in
+        // pkg/types.Type.Predicate.  Required work:
+        //   1. Extend ast.TypeExpr / parser to produce a predicate Expr node for refinement types.
+        //   2. Pass that node through to execLetStmt and execAssignStmt.
+        //   3. Evaluate the predicate with the assigned value bound to the refinement variable.
+        // Until that is done, refinement constraints are enforced only by the static type-checker.
         if s.Mutable {
                 env.Define(s.Name, val)
         } else {
@@ -867,9 +926,7 @@ func execAssignStmt(s *ast.AssignStmt, env *Environment) Value {
 
         switch target := s.Target.(type) {
         case *ast.Identifier:
-                if err := env.Set(target.Name, val); err != nil {
-                        runtimePanic(s.Span, "%s", err.Error())
-                }
+                mustSet(s.Span, env, target.Name, val)
         case *ast.FieldAccess:
                 obj := EvalExpr(target.Object, env)
                 if sv, ok := obj.(*StructVal); ok {
@@ -891,14 +948,13 @@ func execAssignStmt(s *ast.AssignStmt, env *Environment) Value {
                         }
                         v.Elements[i.Val] = val
                 case *MapVal:
-                        for i, k := range v.Keys {
-                                if Equal(k, idx) {
-                                        v.Values[i] = val
-                                        return &NoneVal{}
-                                }
+                        if i, found := v.find(idx); found {
+                                v.Values[i] = val
+                        } else {
+                                v.Keys = append(v.Keys, idx)
+                                v.Values = append(v.Values, val)
+                                v.invalidateIndex()
                         }
-                        v.Keys = append(v.Keys, idx)
-                        v.Values = append(v.Values, val)
                 default:
                         runtimePanic(s.Span, "cannot index-assign on %s", valueTypeNames[obj.Type()])
                 }
@@ -977,6 +1033,12 @@ func evalMatchExpr(m *ast.MatchExpr, env *Environment) Value {
         for _, arm := range m.Arms {
                 armEnv := NewEnclosedEnvironment(env)
                 if matchPattern(arm.Pattern, subject, armEnv) {
+                        if arm.Guard != nil {
+                                guardVal := EvalExpr(arm.Guard, armEnv)
+                                if !IsTruthy(guardVal) {
+                                        continue
+                                }
+                        }
                         return EvalExpr(arm.Body, armEnv)
                 }
         }
@@ -1011,6 +1073,30 @@ func matchPattern(pattern ast.Pattern, value Value, env *Environment) bool {
                                         return false
                                 }
                         }
+                        return true
+                }
+                return false
+        case *ast.OrPattern:
+                // Try left alternative first. Use a temp env to avoid partial bindings on failure.
+                leftEnv := NewEnclosedEnvironment(env)
+                if matchPattern(p.Left, value, leftEnv) {
+                        for k, v := range leftEnv.values {
+                                env.Define(k, v)
+                        }
+                        return true
+                }
+                rightEnv := NewEnclosedEnvironment(env)
+                if matchPattern(p.Right, value, rightEnv) {
+                        for k, v := range rightEnv.values {
+                                env.Define(k, v)
+                        }
+                        return true
+                }
+                return false
+        case *ast.AsPattern:
+                // Match sub-pattern; if successful also bind the whole value to Name.
+                if matchPattern(p.SubPattern, value, env) {
+                        env.Define(p.Name, value)
                         return true
                 }
                 return false
@@ -1197,19 +1283,7 @@ func matchListPattern(p *ast.ListPattern, list *ListVal, env *Environment) bool 
 func execForStmt(s *ast.ForStmt, env *Environment) Value {
         iterable := EvalExpr(s.Iterable, env)
 
-        var items []Value
-        switch v := iterable.(type) {
-        case *ListVal:
-                items = v.Elements
-        case *MapVal:
-                items = v.Keys
-        case *SetVal:
-                items = v.Elements
-        case *TupleVal:
-                items = v.Elements
-        default:
-                runtimePanic(s.Span, "cannot iterate over %s", valueTypeNames[iterable.Type()])
-        }
+        items := collectIterableItems(s.Span, iterable)
 
         var result Value = &NoneVal{}
         for _, item := range items {

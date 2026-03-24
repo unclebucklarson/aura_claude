@@ -107,12 +107,44 @@ func (v *ListVal) String() string {
 }
 
 // MapVal represents a map value (ordered by insertion).
+// strIdx is a lazily-built index for O(1) string-key lookups; it is invalidated
+// (set to nil) whenever the map is structurally mutated (new key added).
 type MapVal struct {
         Keys   []Value
         Values []Value
+        strIdx map[string]int // nil until first lookup; maps string key -> slice index
 }
 
 func (v *MapVal) Type() ValueType { return TypeMap }
+
+// find returns the slice index for the given key, or (-1, false) if not present.
+// String keys use the lazy strIdx cache (O(1) amortised); other key types fall
+// back to a linear scan.
+func (v *MapVal) find(key Value) (int, bool) {
+        if sk, ok := key.(*StringVal); ok {
+                if v.strIdx == nil {
+                        v.strIdx = make(map[string]int, len(v.Keys))
+                        for i, k := range v.Keys {
+                                if s, ok2 := k.(*StringVal); ok2 {
+                                        v.strIdx[s.Val] = i
+                                }
+                        }
+                }
+                i, found := v.strIdx[sk.Val]
+                return i, found
+        }
+        for i, k := range v.Keys {
+                if Equal(k, key) {
+                        return i, true
+                }
+        }
+        return -1, false
+}
+
+// invalidateIndex drops the string-key cache. Call after structurally mutating Keys/Values.
+func (v *MapVal) invalidateIndex() {
+        v.strIdx = nil
+}
 func (v *MapVal) String() string {
         parts := make([]string, len(v.Keys))
         for i := range v.Keys {
