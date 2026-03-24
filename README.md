@@ -1,4 +1,10 @@
-# Aura Toolchain
+# Aura Toolchain — Built by Claude
+
+> This implementation was built entirely by [Claude](https://claude.ai) (Anthropic) via Claude Code,
+> working session-by-session with a human collaborator. No human wrote any of the Go source code.
+> A parallel implementation built using Abacus AI exists at a separate repository for comparison.
+
+---
 
 ## 🤖 AI-First Language — Designed for AI-Human Collaboration
 
