@@ -135,22 +135,48 @@ In vibe coding, the bottleneck isn't writing code — it's **communicating inten
 
 ## Instructions for AI Contributors
 
-If you are an AI agent working on the Aura codebase or generating Aura code, follow these guidelines:
+This repo has two distinct AI contributor modes. Know which one applies:
+
+| Mode | When | Primary files |
+|------|------|---------------|
+| **Toolchain work** | Building the Go implementation of Aura | `pkg/`, `cmd/` |
+| **Aura code generation** | Writing `.aura` programs as examples or tests | `*.aura` |
+
+Almost all active development is **toolchain work**. That mode is the primary focus here.
+
+### Toolchain Work (Go)
+
+The Aura toolchain is a Go project. See `DEVELOPMENT.md` for the pipeline architecture and package layout. Operating rules:
+
+1. **Read before editing** — Always read a file in full before making changes. Never edit from memory or assumption.
+2. **Build after every change** — `go build ./...` must pass before moving on.
+3. **Test before done** — `go test ./...` must pass with zero failures. This is the definition of "done."
+4. **Every feature needs tests** — New behavior without tests is incomplete. Name test files `<feature>_test.go` adjacent to the implementation.
+5. **No scope creep** — Implement exactly what was asked. Do not add features, refactor nearby code, or improve things that weren't mentioned.
+6. **Optimize for AI parseability** — Every new language feature should ask: "Can an AI read this output and know exactly what to do?"
+7. **Structured over freeform** — Prefer structured syntax over comments or conventions.
+8. **Machine-checkable** — Every new contract should be verifiable by the compiler, not just by human review.
+
+### Common Pitfalls
+
+These are the ways AI agents most often go wrong on this codebase:
+
+- **Editing without reading** — The most common mistake. Always read a file before editing it, even if you think you know its contents.
+- **Assuming state is current** — Test counts and version numbers in `AI_NEXT_SESSION.md` can be stale. Verify with `go test ./... -count=1 -v | grep -c PASS` before reporting.
+- **Skipping `go test ./...`** — Building is not enough. A build can pass while tests fail. Always run the full suite.
+- **Scope creep** — Adding docstrings, cleaning up nearby code, refactoring "while you're in there." Don't. Do only what was asked.
+- **Breaking existing tests** — When adding a feature, run the full suite, not just the new tests. Regressions are easy to introduce silently.
+- **Trusting stale grep results** — Function names and file locations change. Re-verify before acting on remembered locations.
 
 ### When Generating Aura Code
+
+When writing `.aura` programs (examples, tests, documentation):
 
 1. **Start with the spec** — Always read or write the spec block first. It defines the contract.
 2. **Respect effects** — Only use capabilities declared in the function signature.
 3. **Use refinement types** — Encode constraints in the type system, not in runtime checks.
 4. **Handle all error cases** — Use the spec's `errors` section as a checklist.
 5. **Use `satisfies`** — Link every implementation to its spec for automatic validation.
-
-### When Contributing to the Aura Toolchain
-
-1. **Optimize for AI parseability** — Every new feature should ask: "Can an AI read this and know exactly what to do?"
-2. **Structured over freeform** — Prefer structured syntax (like spec blocks) over comments or conventions.
-3. **Explicit over implicit** — If information exists, it should be in the syntax, not inferred.
-4. **Machine-checkable** — Every contract should be verifiable by the compiler, not just by human review.
 
 ### Design Decision Framework
 
@@ -165,51 +191,40 @@ When faced with a design choice, apply this priority order:
 
 ## How Aura Reduces Ambiguity for AI
 
-### Structured Specs vs. Natural Language Comments
+Three concrete examples of how Aura's design benefits AI agents:
 
+**1. Specs replace natural language comments**
 ```
-# Other languages: AI must parse natural language (error-prone)
-# Creates a new task. Title must be non-empty and under 200 chars.
-# Priority defaults to 3. Can fail with validation error.
-# Writes to database and uses system time.
+# Other languages: AI must parse prose (error-prone)
+# Creates a task. Title must be non-empty. Can fail. Writes to DB.
 
-# Aura: AI reads structured data (unambiguous)
+# Aura: structured, machine-readable contract
 spec CreateNewTask:
-    doc: "Create a new task with validation"
     inputs:
-        title: String where len >= 1 and len <= 200 — "Task title"
-        priority: Int where self >= 1 and self <= 5 — "Priority level"
-    guarantees:
-        - "Returns a valid Task with generated ID"
+        title: String where len >= 1 and len <= 200
+        priority: Int where self >= 1 and self <= 5
+    guarantees: ["Returns a valid Task with generated ID"]
     effects: [db, time]
     errors:
         ValidationError — "Title or priority out of bounds"
 ```
 
-### Explicit Effects vs. Hidden Side Effects
-
+**2. Effects replace hidden side effects**
 ```
 # Other languages: AI has no idea what this function touches
-def save_task(task):
-    db.insert(task)          # Hidden DB write
-    notify(task.assignee)    # Hidden network call
-    audit_log(task)          # Hidden file write
+def save_task(task): ...
 
-# Aura: AI knows exactly what capabilities are used
-fn save_task(task: Task) -> Result[Unit, SaveError] with db, net, log:
-    db.insert(task)?
-    notify(task.assignee)?
-    audit_log(task)?
+# Aura: capabilities are explicit in the signature
+fn save_task(task: Task) -> Result[Unit, SaveError] with db, net, log: ...
 ```
 
-### Refinement Types vs. Runtime Validation
-
+**3. Refinement types replace scattered validation**
 ```
-# Other languages: AI must find and read validation code
+# Other languages: constraints live somewhere in validation code
 class Task:
     title: str  # Must be 1-200 chars... somewhere there's a validator
 
-# Aura: Constraints are IN the type
+# Aura: constraints are IN the type
 pub struct Task:
     pub title: String where len >= 1 and len <= 200
 ```
@@ -226,8 +241,6 @@ Aura is not just another programming language. It's a **communication protocol b
 - **`satisfies`** replaces manual verification with compiler-checked links
 
 **When you work on Aura, you're building the future of AI-human programming.**
-
----
 
 ---
 
@@ -284,8 +297,9 @@ When a session completes a chunk or phase:
 
 At the start of a session:
 1. Read `AI_NEXT_SESSION.md` — gets current state and the immediate task
-2. Read relevant source files for the task at hand — do not read history files
-3. Do not re-read `CHANGELOG.md` or completed phase sections unless specifically asked
+2. **Verify session doc state against actual files** — test counts and version numbers can be stale; run `go test ./... -count=1` before reporting numbers as fact
+3. Read relevant source files for the task at hand — do not read history files
+4. Do not re-read `CHANGELOG.md` or completed phase sections unless specifically asked
 
 The session document is optimized for **token efficiency**: it contains only what the AI needs to act, nothing more.
 
