@@ -6,6 +6,67 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [v0.9.1] — 2026-03-23
+
+### Refinement Type Runtime Enforcement (Issue #8)
+
+Refinement type predicates are now evaluated at runtime, not just at compile time.
+
+### Added
+- `enforceRefinement()` in `pkg/interpreter/eval.go` — evaluates the predicate from `ast.RefinementType` with `self` bound to the assigned value; panics with a clear message on violation
+- Named type alias resolution — `type Priority = Int where self >= 1 and self <= 5` is enforced anywhere `Priority` is used as a type hint
+- `typeExprs map[string]ast.TypeExpr` in `Environment` — registered during module init for both main and imported modules
+- Enforcement at `let` binding sites and function parameter binding
+- 10 new tests in `pkg/interpreter/refinement_test.go`
+
+### Files Changed
+- `pkg/interpreter/env.go` — Added `typeExprs` map, `DefineTypeExpr`, `GetTypeExpr`
+- `pkg/interpreter/eval.go` — Added `enforceRefinement()`, wired into `execLetStmt` and `callUserFn`
+- `pkg/interpreter/interpreter.go` — `TypeDef` bodies now registered during module init
+- `pkg/interpreter/refinement_test.go` — **NEW**: 10 refinement enforcement tests
+
+**Total tests:** 1004 (all passing)
+
+---
+
+## [v0.9.0] — 2026-03-23
+
+### Phase 3.2 Chunk 4: Exhaustiveness Checking
+
+Static exhaustiveness checking for match expressions and statements.
+
+### Added
+- `patternCoversVariants()` — recursive helper, handles `OrPattern` and `AsPattern`
+- `patternCoversBoolLiterals()` — Bool exhaustiveness helper
+- `checkBoolExhaustivenessPats()` — Bool exhaustiveness for stmt and expr forms
+- `inferMatchExpr()` — full type inference for match expressions with exhaustiveness
+- `checkMatchExprEnumExhaustiveness()` — enum exhaustiveness for expression form
+- `*ast.MatchExpr` case wired into `inferExpr` switch
+- Bool exhaustiveness check added to `checkMatchStmt`
+- 12 new tests in `pkg/checker/match_exhaustiveness_test.go`
+
+**Total tests:** 994 (all passing)
+
+---
+
+## [v0.9.0-alpha.3] — 2026-03-23
+
+### Phase 3.2 Chunk 3: Guard Clauses, Or-patterns, Binding Patterns
+
+### Added
+- **Guard clauses**: `x if x > 0 -> "positive"` on match arms
+- **Or-patterns**: `1 | 2 | 3 -> "low"` — multiple patterns share one arm
+- **Binding patterns**: `pattern as name` — bind the matched value to a name
+- Parser: `parsePattern()` wrapper handles `|` chaining and `as` binding
+- Parser: `blockExprDepth int` counter replaces `blockExprJustEnded bool`
+- Interpreter: `matchPattern()` handles `OrPattern` and `AsPattern`
+- `MatchArm` gets optional `Guard Expr` field
+- 19 new tests in `pkg/interpreter/match_chunk3_test.go`
+
+**Total tests:** 982 (all passing)
+
+---
+
 ## [v0.9.0-alpha.2] — 2026-03-23
 
 ### Phase 3.2 Chunk 2: Structured Data Patterns

@@ -229,4 +229,66 @@ Aura is not just another programming language. It's a **communication protocol b
 
 ---
 
+---
+
+## Session Protocol
+
+Aura is developed in sessions with an AI agent (Claude). Each session starts cold — no memory of prior conversations. This protocol ensures every session starts at full context without re-reading history.
+
+### Files
+
+| File | Purpose |
+|------|---------|
+| `AI_NEXT_SESSION.md` | **Forward-only.** Current state + open debt + next task plan. The AI's entry point. |
+| `CHANGELOG.md` | **Backward-only.** Permanent record of what was built and when. |
+| `ROADMAP.md` | Phase plan and milestones. Updated when phases complete or priorities shift. |
+
+### What belongs in AI_NEXT_SESSION.md
+
+**Include:**
+- Current state table: version, test count, phases complete
+- Open technical debt with status
+- The next phase plan, chunked with effort estimates and test targets
+- Non-obvious architectural decisions and constraints that aren't visible in the code
+- Design decisions that still need to be made before implementation starts
+
+**Do not include:**
+- History of completed work (that's `CHANGELOG.md` and `git log`)
+- Rationale for decisions that are already implemented
+- Per-file change lists for finished phases
+- Anything derivable by reading the current codebase
+
+**Target length:** Under 150 lines. If it grows beyond that, move completed items to `CHANGELOG.md`.
+
+### End-of-session checklist
+
+When a session completes a chunk or phase:
+
+1. **Update `AI_NEXT_SESSION.md`:**
+   - Update the State table (version, test count)
+   - Mark completed debt items ✅
+   - Update "Next:" to point at the next chunk/phase
+   - Remove completed chunk details; leave only what's ahead
+
+2. **Update `CHANGELOG.md`:**
+   - Add an entry for the completed version
+   - Include what was added, files changed, test count
+
+3. **Update `ROADMAP.md`:**
+   - Mark completed phases ✅ in the overview table and section header
+   - Add version history entries
+
+4. **Commit** with a descriptive message summarizing what the session delivered.
+
+### How the AI should use these files
+
+At the start of a session:
+1. Read `AI_NEXT_SESSION.md` — gets current state and the immediate task
+2. Read relevant source files for the task at hand — do not read history files
+3. Do not re-read `CHANGELOG.md` or completed phase sections unless specifically asked
+
+The session document is optimized for **token efficiency**: it contains only what the AI needs to act, nothing more.
+
+---
+
 *See also: [README.md](README.md) · [ROADMAP.md](ROADMAP.md) · [DEVELOPMENT.md](DEVELOPMENT.md) · [Language Guide](user_docs/language_guide.md)*
