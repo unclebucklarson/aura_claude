@@ -32,7 +32,7 @@ These principles guide every phase of development. When evaluating features, tra
 | 1 | Syntax (Lexer, Parser, Formatter) | ✅ COMPLETE | v0.1 | — |
 | 2 | Semantic Analysis | ✅ COMPLETE | v0.2 | — |
 | 3.1 | Tree-Walk Interpreter | ✅ COMPLETE | v0.3 | — |
-| 3.2 | Pattern Matching (Advanced) | 🔲 Not Started | v0.9.0 | 2–3 weeks |
+| 3.2 | Pattern Matching (Advanced) | ✅ COMPLETE | v0.9.0 | — |
 | 3.3 | Advanced Type Features | 🔲 Not Started | v1.0.0 | 3–4 weeks |
 | 4 | Runtime & Standard Library | ✅ COMPLETE (4.1 ✅, 4.2 ✅, 4.3 ✅) | v0.8.0 | — |
 | 5 | Advanced Tooling & Ecosystem | 🔲 Not Started | v1.1.0 | 4–6 weeks |
@@ -111,7 +111,7 @@ The foundation of the Aura toolchain is fully implemented and tested.
 - [x] AI-parseable structured error output (JSON format with error codes, expected/got, fix suggestions)
 - [x] CLI `aura check` command with `--json` flag for AI agents
 
-**Package:** `pkg/checker` — 48 tests ✅
+**Package:** `pkg/checker` — 61 tests ✅
 
 ### Deferred to Future Phases
 
@@ -197,26 +197,27 @@ The tree-walk interpreter is the **highest-impact next step** for the AI-first m
 - [x] `--json` flag for structured output (AI agent consumption)
 - [x] `--dry-run` flag for validation without execution
 
-### 3.2 Pattern Matching (Advanced) — 🔲 NOT STARTED
+### 3.2 Pattern Matching (Advanced) — ✅ COMPLETE
 
-**Complexity:** Medium | **Estimate:** 2–3 weeks | **Target:** v0.9.0
+**Complexity:** Medium | **Completed:** 2026-03-23 | **Version:** v0.9.0
 
 > 🤖 **AI optimization:** Advanced pattern matching enables AI to generate more expressive and concise code. Exhaustiveness checking provides compile-time guarantees that AI-generated match expressions handle all cases — a critical safety property.
 
-**Note:** Basic `match` with enum variants and literals is already implemented in Phase 3.1. This phase completes the pattern matching system with advanced features.
+**Delivered in 4 chunks (89 new tests, 994 total):**
 
-- [ ] Nested patterns (patterns within patterns, e.g., `Some(Ok(x))`)
-- [ ] Guard clauses (`when` conditions on match arms)
-- [ ] Or-patterns (`A | B => ...` — match multiple patterns with one arm)
-- [ ] Binding patterns (`x @ Pattern` — bind a name while matching)
-- [ ] Exhaustiveness checking for all pattern types (not just enums)
-- [ ] Destructuring in `let` bindings (e.g., `let (x, y) = tuple`)
-- [ ] Wildcard patterns with type narrowing
-- [ ] Struct destructuring in match arms
+- [x] Nested patterns (patterns within patterns, e.g., `Some(Ok(x))`)
+- [x] Guard clauses (`x if x > 0 -> ...` on match arms)
+- [x] Or-patterns (`A | B -> ...` — match multiple patterns with one arm)
+- [x] Binding patterns (`pattern as name` — bind a name while matching)
+- [x] Exhaustiveness checking — enums and Bool in both stmt and expr forms
+- [x] Destructuring in `let` bindings (e.g., `let (x, y) = tuple`)
+- [x] Wildcard patterns with type narrowing
+- [x] Tuple, List, Spread, Constructor patterns
+- [x] `*ast.MatchExpr` type inference integrated into checker
 
 **Package:** `pkg/interpreter`, `pkg/checker`
 
-**Estimated test additions:** ~80–120 new tests
+**Tests added:** 89 new tests (25 + 33 + 19 + 12 across 4 chunks)
 
 ### 3.3 Advanced Type Features — 🔲 NOT STARTED
 
@@ -647,3 +648,8 @@ See [DEVELOPMENT.md](DEVELOPMENT.md) for setup instructions, architecture overvi
 | 2026-03-20 | v0.4.0 | **Phase 4.1 complete** — 108+ core runtime methods (String: 22, List: 27, Map: 24, Option: 17, Result: 18), method dispatch registry, 468 total tests |
 | 2026-03-21 | v0.6.0 | **Phase 4.2 complete** — Module system + 12 pure computation stdlib modules, 70 stdlib functions, 614 total tests |
 | 2026-03-22 | v0.8.0 | **Phase 4 complete** — Effect Runtime (5 providers), 17 stdlib modules, 117 stdlib functions, MockBuilder, effect composition, 875 total tests |
+| 2026-03-23 | v0.8.1 | Phase 3.1.1 — Tuple literal syntax, destructuring, 12 tuple methods, 34 new tests (905 total) |
+| 2026-03-23 | v0.9.0-alpha.1 | Phase 3.2 Chunk 1 — MatchExpr core infrastructure, literal/variable/wildcard patterns, 25 new tests (930 total) |
+| 2026-03-23 | v0.9.0-alpha.2 | Phase 3.2 Chunk 2 — Tuple, list, constructor, spread patterns, 33 new tests (963 total) |
+| 2026-03-23 | v0.9.0-alpha.3 | Phase 3.2 Chunk 3 — Guard clauses, or-patterns, binding patterns (as), 19 new tests (982 total) |
+| 2026-03-23 | v0.9.0 | **Phase 3.2 complete** — Exhaustiveness checking (enum + Bool), inferMatchExpr, patternCoversVariants, 12 new tests (994 total) |
