@@ -431,7 +431,7 @@ func (interp *Interpreter) Run() (result Value, err error) {
                         interp.env.DefineConst(it.Name, val)
 
                 case *ast.TypeDef:
-                        // Type aliases: no runtime effect
+                        interp.env.DefineTypeExpr(it.Name, it.Body)
                 case *ast.TraitDef:
                         // Traits: no runtime effect for now
                 case *ast.ImplBlock:
@@ -663,6 +663,8 @@ func (interp *Interpreter) loadModuleValue(cached *module.CachedModule, importPa
                                                 variants[v.Name] = len(v.Fields)
                                         }
                                         childInterp.env.DefineEnum(it.Name, variants)
+                                case *ast.TypeDef:
+                                        childInterp.env.DefineTypeExpr(it.Name, it.Body)
                                 }
                         }
                         for name := range cached.Exports {

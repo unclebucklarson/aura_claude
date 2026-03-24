@@ -1,6 +1,10 @@
 package interpreter
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/unclebucklarson/aura/pkg/ast"
+)
 
 // Environment implements lexical scoping with a parent chain.
 type Environment struct {
@@ -12,6 +16,8 @@ type Environment struct {
 	structDefs map[string][]string
 	// enumDefs stores enum definitions (name -> variant definitions)
 	enumDefs map[string]map[string]int // enumName -> variantName -> arity
+	// typeExprs stores type alias bodies (name -> TypeExpr AST node)
+	typeExprs map[string]ast.TypeExpr
 	// effects tracks available effect capabilities
 	effects map[string]bool
 }
@@ -23,6 +29,7 @@ func NewEnvironment() *Environment {
 		consts:     make(map[string]bool),
 		structDefs: make(map[string][]string),
 		enumDefs:   make(map[string]map[string]int),
+		typeExprs:  make(map[string]ast.TypeExpr),
 		effects:    make(map[string]bool),
 	}
 }
@@ -120,4 +127,20 @@ func (e *Environment) HasEffect(name string) bool {
 		return e.parent.HasEffect(name)
 	}
 	return false
+}
+
+// DefineTypeExpr registers a type alias body (used for refinement enforcement).
+func (e *Environment) DefineTypeExpr(name string, expr ast.TypeExpr) {
+	e.typeExprs[name] = expr
+}
+
+// GetTypeExpr looks up a type alias body, walking the parent chain.
+func (e *Environment) GetTypeExpr(name string) (ast.TypeExpr, bool) {
+	if expr, ok := e.typeExprs[name]; ok {
+		return expr, true
+	}
+	if e.parent != nil {
+		return e.parent.GetTypeExpr(name)
+	}
+	return nil, false
 }

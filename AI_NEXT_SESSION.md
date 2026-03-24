@@ -6,7 +6,7 @@
 
 | Metric | Value |
 |--------|-------|
-| Total tests | **994** (all passing) |
+| Total tests | **1004** (all passing) |
 | Built-in methods | 120+ across 6 types (String, List, Map, Option, Result, Tuple) |
 | Standard library modules | 17 |
 | Standard library functions | 117 |
@@ -24,36 +24,27 @@
 | pkg/parser | 16 |
 | pkg/symbols | 9 |
 | pkg/types | 26 |
-| pkg/interpreter | 845 |
-| **Total** | **994** |
+| pkg/interpreter | 855 |
+| **Total** | **1004** |
 
 ---
 
 ## Open Technical Debt
 
-### Issue #8 — Refinement Type Runtime Enforcement 🟡 DEFERRED
+### Issue #8 — Refinement Type Runtime Enforcement ✅ COMPLETE (2026-03-23)
 
-**File:** `pkg/interpreter/eval.go`, `pkg/types/types.go`
+**Files changed:** `pkg/interpreter/env.go`, `pkg/interpreter/eval.go`, `pkg/interpreter/interpreter.go`, `pkg/interpreter/refinement_test.go`
 
-- `Int where x > 0` is parsed, stored in the AST, and type-checked — but the predicate is **never evaluated at runtime**
-- A value of `-5` can be assigned to a `PositiveInt` variable without error
-- There is a `TODO` comment in `execLetStmt` noting this
-
-**Recommended:** Tackle this before Phase 3.3. It is ~1 day, self-contained, and clears the last piece of open technical debt. Refinement types become meaningless without runtime enforcement, and Phase 3.3 will build on the type system.
-
-**Implementation sketch:**
-1. In `execLetStmt` (and assignment), when the declared type is a refinement (`types.KindRefinement`), extract the predicate expression from the type definition
-2. Bind the refinement variable name to the assigned value in a temporary environment
-3. Evaluate the predicate; if false, call `runtimePanic` with a clear message
-4. Also enforce in function argument binding (`evalCallExpr`) when param type is a refinement
-
-**Estimated tests:** ~8 new interpreter tests
+- `enforceRefinement()` evaluates predicate with `self` bound to the value
+- Handles inline refinements (`Int where self >= 0`) and named type aliases (`type Priority = Int where self >= 1 and self <= 5`)
+- Enforced on `let` bindings and function parameters
+- 10 new tests — all passing (1004 total)
 
 ---
 
 ## 🚀 NEXT PRIORITY — Phase 3.3: Advanced Type Features
 
-> **⚡ START HERE after clearing Issue #8.**
+> **⚡ START HERE next session.**
 >
 > Phase 3.2 complete (v0.9.0). Phase 3.3 advances the type system with generics,
 > improved inference, interface types, and type constraints.

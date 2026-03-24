@@ -496,15 +496,18 @@ func callFunction(span token.Span, callee Value, args []Value, env *Environment)
 func callUserFn(span token.Span, fn *FunctionVal, args []Value) Value {
         fnEnv := NewEnclosedEnvironment(fn.Env)
 
-        // Bind parameters
+        // Bind parameters and enforce any refinement type constraints
         for i, param := range fn.Params {
+                var argVal Value
                 if i < len(args) {
-                        fnEnv.Define(param.Name, args[i])
+                        argVal = args[i]
                 } else if param.Default != nil {
-                        fnEnv.Define(param.Name, EvalExpr(param.Default, fn.Env))
+                        argVal = EvalExpr(param.Default, fn.Env)
                 } else {
                         runtimePanic(span, "missing argument for parameter '%s' in function '%s'", param.Name, fn.Name)
                 }
+                enforceRefinement(span, param.TypeExpr, argVal, fnEnv)
+                fnEnv.Define(param.Name, argVal)
         }
 
         result := execBlock(fn.Body, fnEnv)
@@ -904,15 +907,32 @@ func ExecStmt(stmt ast.Statement, env *Environment) Value {
         return &NoneVal{}
 }
 
+// enforceRefinement checks that val satisfies a refinement predicate embedded in
+// typeHint. The predicate is evaluated in a child environment where "self" is
+// bound to val. Named type aliases are resolved through env.GetTypeExpr.
+// No-op when typeHint is nil or has no refinement.
+func enforceRefinement(span token.Span, typeHint ast.TypeExpr, val Value, env *Environment) {
+        if typeHint == nil {
+                return
+        }
+        switch th := typeHint.(type) {
+        case *ast.RefinementType:
+                predEnv := NewEnclosedEnvironment(env)
+                predEnv.Define("self", val)
+                result := EvalExpr(th.Predicate, predEnv)
+                if !IsTruthy(result) {
+                        runtimePanic(span, "refinement type constraint violated: value %s does not satisfy predicate", valueRepr(val))
+                }
+        case *ast.NamedType:
+                if body, ok := env.GetTypeExpr(th.Name); ok {
+                        enforceRefinement(span, body, val, env)
+                }
+        }
+}
+
 func execLetStmt(s *ast.LetStmt, env *Environment) Value {
         val := EvalExpr(s.Value, env)
-        // TODO(refinement-runtime): s.TypeHint may carry a refinement predicate (e.g. "Int where x > 0").
-        // To enforce it here we need the predicate stored as a parsed ast.Expr, not the current string in
-        // pkg/types.Type.Predicate.  Required work:
-        //   1. Extend ast.TypeExpr / parser to produce a predicate Expr node for refinement types.
-        //   2. Pass that node through to execLetStmt and execAssignStmt.
-        //   3. Evaluate the predicate with the assigned value bound to the refinement variable.
-        // Until that is done, refinement constraints are enforced only by the static type-checker.
+        enforceRefinement(s.Span, s.TypeHint, val, env)
         if s.Mutable {
                 env.Define(s.Name, val)
         } else {
