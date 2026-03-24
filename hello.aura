@@ -1,0 +1,7 @@
+module hello_world
+
+import std.io
+
+fn main():
+    std.io.println("Hello World")
+    std.io.println("Welcome to Aura! ")

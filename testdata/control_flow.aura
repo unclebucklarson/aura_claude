@@ -1,0 +1,24 @@
+module control_flow
+
+pub fn example(x: Int) -> String:
+    if x > 0:
+        return "positive"
+    elif x < 0:
+        return "negative"
+    else:
+        return "zero"
+
+pub fn match_example(x: Int) -> String:
+    match x:
+        case 0:
+            return "zero"
+        case 1:
+            return "one"
+        case _:
+            return "other"
+
+pub fn loop_example() -> Int:
+    let mut sum = 0
+    for i in range(10):
+        sum = sum + i
+    return sum

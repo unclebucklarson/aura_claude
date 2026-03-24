@@ -1,0 +1,8 @@
+# This is a comment
+## This is a doc comment
+
+module comments_test
+
+# A simple function
+pub fn hello() -> String:
+    return "hello"

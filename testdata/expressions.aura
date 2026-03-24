@@ -1,0 +1,11 @@
+module expressions
+
+pub fn examples() -> Int:
+    let a = 1 + 2 * 3
+    let b = (1 + 2) * 3
+    let c = not true
+    let d = a > 0 and b < 10
+    let e = if a > 0 then 1 else 0
+    let f = [1, 2, 3]
+    let g = {"a": 1, "b": 2}
+    return a

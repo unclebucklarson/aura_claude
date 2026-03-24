@@ -1,0 +1,52 @@
+module auratask.service
+
+from auratask.models import Task, TaskId, TaskError, Priority, TaskStatus
+import std.time as time
+import std.uuid as uuid
+
+pub fn create_task(title: String, priority: Priority = 3) -> Result[Task, TaskError] with db, time satisfies CreateNewTask:
+    if title.len == 0 or title.len > 200:
+        return Err(TaskError.InvalidTitle("Title must be between 1 and 200 characters"))
+
+    let now = time.now()
+    let id = uuid.v4()
+
+    let task = Task(
+        id: id,
+        title: title,
+        priority: priority,
+        status: "pending",
+        created_at: now,
+    )
+
+    db.insert("tasks", task)
+    return Ok(task)
+
+pub fn complete_task(task_id: TaskId) -> Result[Task, TaskError] with db, time satisfies CompleteTask:
+    let maybe_task = db.query_one("tasks", task_id)
+    if maybe_task is none:
+        return Err(TaskError.NotFound(task_id))
+
+    let task = maybe_task!
+
+    if task.status == "done":
+        return Err(TaskError.AlreadyCompleted(task_id))
+
+    let now = time.now()
+    let updated = Task(
+        id: task.id,
+        title: task.title,
+        description: task.description,
+        status: "done",
+        priority: task.priority,
+        created_at: task.created_at,
+        completed_at: Some(now),
+        tags: task.tags,
+    )
+
+    db.update("tasks", task_id, updated)
+    return Ok(updated)
+
+pub fn list_tasks_by_status(status: TaskStatus) -> Result[[Task], TaskError] with db satisfies ListTasksByStatus:
+    let tasks = db.query("tasks", {status: status}, order_by: "priority", descending: true)
+    return Ok(tasks)

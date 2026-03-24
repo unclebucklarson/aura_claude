@@ -1,0 +1,38 @@
+module auratask.specs
+
+from auratask.models import Task, TaskId, TaskError, Priority, TaskStatus
+
+spec CreateNewTask:
+    doc: "Creates a new task with the given title and optional priority."
+
+    inputs:
+        title: String where len >= 1 and len <= 200 - "The task title"
+        priority: Priority = 3 - "Task priority, 1 (low) to 5 (critical)"
+
+    guarantees:
+        - "Returns a Task with status 'pending'"
+        - "The returned Task has a unique, non-empty id"
+        - "The returned Task's created_at is the current time"
+        - "The task is persisted in the database"
+
+    effects: db, time
+
+    errors:
+        InvalidTitle(String) - "When title is empty or exceeds 200 characters"
+
+spec CompleteTask:
+    doc: "Marks an existing task as done and records the completion time."
+
+    inputs:
+        task_id: TaskId - "The ID of the task to complete"
+
+    guarantees:
+        - "The task's status is changed to 'done'"
+        - "The task's completed_at is set to the current time"
+        - "The updated task is persisted in the database"
+
+    effects: db, time
+
+    errors:
+        NotFound(TaskId) - "When no task exists with the given ID"
+        AlreadyCompleted(TaskId) - "When the task is already in 'done' status"

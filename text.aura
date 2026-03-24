@@ -1,0 +1,4 @@
+module frustration
+
+type Name = String
+let Name = "Scott"

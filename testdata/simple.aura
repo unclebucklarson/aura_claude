@@ -1,0 +1,17 @@
+module simple
+
+type Name = String
+
+pub struct Point:
+    pub x: Float
+    pub y: Float
+
+pub enum Color:
+    Red
+    Green
+    Blue
+
+pub fn add(a: Int, b: Int) -> Int:
+    return a + b
+
+let result = add(1, 2)

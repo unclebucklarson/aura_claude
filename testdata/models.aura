@@ -1,0 +1,24 @@
+module auratask.models
+
+import std.time as time
+
+type TaskId = String where len >= 1 and len <= 64
+type Priority = Int where self >= 1 and self <= 5
+type TaskStatus = "pending" | "in_progress" | "done" | "cancelled"
+
+pub struct Task:
+    pub id: TaskId
+    pub title: String where len >= 1 and len <= 200
+    pub description: String = ""
+    pub status: TaskStatus = "pending"
+    pub priority: Priority = 3
+    pub created_at: time.Instant
+    pub completed_at: time.Instant? = none
+    pub tags: [String] = []
+
+pub enum TaskError:
+    NotFound(TaskId)
+    InvalidTitle(String)
+    AlreadyCompleted(TaskId)
+    InvalidTransition(TaskStatus, TaskStatus)
+    Unauthorized(String)
