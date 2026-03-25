@@ -171,6 +171,15 @@ func evalBinaryOp(e *ast.BinaryOp, env *Environment) Value {
                 return EvalExpr(e.Right, env)
         }
 
+        // Optimize chained string concatenation to O(n) using strings.Builder.
+        // For a + b + c + d ... (3+ operands), collect all leaves first then
+        // build in one pass instead of allocating an intermediate string per +.
+        if e.Op == "+" {
+                if leaves := collectConcatLeaves(e); len(leaves) >= 3 {
+                        return evalConcatChain(e, leaves, env)
+                }
+        }
+
         left := EvalExpr(e.Left, env)
         right := EvalExpr(e.Right, env)
 
@@ -225,8 +234,6 @@ func evalAdd(e *ast.BinaryOp, left, right Value) Value {
                 }
         case *StringVal:
                 if rv, ok := right.(*StringVal); ok {
-                        // NOTE: each + allocates a new string. For building large strings in a loop,
-                        // use string.join(parts, "") from the stdlib to avoid O(n²) allocation.
                         return &StringVal{Val: lv.Val + rv.Val}
                 }
         case *ListVal:
@@ -239,6 +246,58 @@ func evalAdd(e *ast.BinaryOp, left, right Value) Value {
         }
         runtimePanic(e.Span, "cannot add %s and %s", valueTypeNames[left.Type()], valueTypeNames[right.Type()])
         return nil
+}
+
+// collectConcatLeaves walks the left-associative spine of chained + expressions,
+// returning all leaf expressions in left-to-right order.
+// e.g. ((a + b) + c) + d  →  [a, b, c, d]
+func collectConcatLeaves(expr ast.Expr) []ast.Expr {
+        var leaves []ast.Expr
+        cur := expr
+        for {
+                bin, ok := cur.(*ast.BinaryOp)
+                if !ok || bin.Op != "+" {
+                        leaves = append(leaves, cur)
+                        break
+                }
+                leaves = append(leaves, bin.Right)
+                cur = bin.Left
+        }
+        // Collected right-to-left; reverse to restore left-to-right order.
+        for i, j := 0, len(leaves)-1; i < j; i, j = i+1, j-1 {
+                leaves[i], leaves[j] = leaves[j], leaves[i]
+        }
+        return leaves
+}
+
+// evalConcatChain evaluates all leaves of a + chain at once.
+// If all values are strings, a single strings.Builder pass avoids the O(n²)
+// intermediate-string allocation that repeated lv+rv would produce.
+// For non-string operands, falls back to a left-fold via evalAdd.
+func evalConcatChain(e *ast.BinaryOp, leaves []ast.Expr, env *Environment) Value {
+        vals := make([]Value, len(leaves))
+        for i, leaf := range leaves {
+                vals[i] = EvalExpr(leaf, env)
+        }
+        // Fast path: all strings → single builder pass.
+        if _, ok := vals[0].(*StringVal); ok {
+                var sb strings.Builder
+                for _, v := range vals {
+                        sv, ok := v.(*StringVal)
+                        if !ok {
+                                goto fold
+                        }
+                        sb.WriteString(sv.Val)
+                }
+                return &StringVal{Val: sb.String()}
+        }
+fold:
+        // Non-string chain (numeric, list, …): left-fold through evalAdd.
+        result := vals[0]
+        for _, v := range vals[1:] {
+                result = evalAdd(e, result, v)
+        }
+        return result
 }
 
 func evalArith(e *ast.BinaryOp, left, right Value, intOp func(int64, int64) int64, floatOp func(float64, float64) float64) Value {
@@ -588,11 +647,22 @@ func evalFieldAccess(e *ast.FieldAccess, env *Environment) Value {
                 }
                 return val
         case *StructVal:
-                val, ok := v.Fields[e.Field]
-                if !ok {
-                        runtimePanic(e.Span, "struct '%s' has no field '%s'", v.TypeName, e.Field)
+                if val, ok := v.Fields[e.Field]; ok {
+                        return val
                 }
-                return val
+                // Check impl method dispatch
+                if fn, ok := env.GetImplMethod(v.TypeName, e.Field); ok {
+                        receiver := v
+                        capturedFn := fn
+                        return &BuiltinFnVal{
+                                Name: v.TypeName + "." + e.Field,
+                                Fn: func(args []Value) Value {
+                                        allArgs := append([]Value{receiver}, args...)
+                                        return callUserFn(e.Span, capturedFn, allArgs)
+                                },
+                        }
+                }
+                runtimePanic(e.Span, "struct '%s' has no field or method '%s'", v.TypeName, e.Field)
         case *MapVal:
                 // Map field access (dot notation for string keys)
                 key := &StringVal{Val: e.Field}

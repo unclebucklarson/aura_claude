@@ -6,6 +6,152 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [v1.0.0] — 2026-03-24
+
+### Issue #11: String Concatenation O(n²) Fix
+
+Expression-level string concatenation chains (`a + b + c + d + …`) now run in O(n) time and produce a single allocation via `strings.Builder` instead of one intermediate string per `+`.
+
+### Added
+- `collectConcatLeaves(expr ast.Expr) []ast.Expr` in `pkg/interpreter/eval.go` — walks the left-associative `+` spine and returns all leaf expressions in order
+- `evalConcatChain(e, leaves, env)` — evaluates all leaves then builds result with `strings.Builder` for string chains; falls back to left-fold via `evalAdd` for non-string types
+- `TestStringConcatChain` in `pkg/interpreter/interpreter_test.go`
+
+### Changed
+- `evalBinaryOp` — intercepts `+` chains of 3+ operands before general evaluation, routing them through `evalConcatChain`
+
+### Phase 3.3 Chunk 4: Improved Type Inference
+
+Bidirectional type inference for `let` bindings with annotations. When a `let` has both a type annotation and a value, the annotation is used as a *hint* to check constructor arguments and infer empty collection element types.
+
+### Added
+- `inferExprWithHint(expr ast.Expr, hint *types.Type) *types.Type` in `pkg/checker/checker.go` — targeted bidirectional inference; handles `[]` → `[T]`, `{}` → `{K:V}`, `Some(x)` → `Option[T]`, `Ok(x)`/`Err(x)` → `Result[T,E]`
+- `pkg/checker/inference_test.go` — **NEW**: 13 tests (empty list/map with annotation, `Some/Ok/Err` match/mismatch, generic type aliases)
+- `pkg/interpreter/inference_test.go` — **NEW**: 11 tests (empty collections at runtime, constructor match via annotated binding, generic alias runtime behavior)
+
+### Changed
+- `checkLetStmt` — resolves annotation first when present; passes resolved type as hint to `inferExprWithHint` instead of calling `inferExpr` directly
+
+### Files Changed
+- `pkg/checker/checker.go` — Added `inferExprWithHint`; updated `checkLetStmt`
+- `pkg/checker/inference_test.go` — **NEW**: 13 tests
+- `pkg/interpreter/inference_test.go` — **NEW**: 11 tests
+- `pkg/interpreter/interpreter_test.go` — Added `TestStringConcatChain`
+- `pkg/interpreter/eval.go` — Added `collectConcatLeaves`, `evalConcatChain`
+
+**Total tests:** 1121 (all passing, race-clean)
+
+---
+
+## [v1.0.0-alpha.3] — 2026-03-24
+
+### Phase 3.3 Chunk 3: Type Constraints and `where` Clauses
+
+Generic functions can now declare type constraints: `fn show[T](x: T) -> String where T: Printable`. The compiler enforces at every call site that the concrete type satisfies the required interface.
+
+### Added
+- `TypeConstraint struct { TypeParam, TraitName string }` in `pkg/ast/ast.go`
+- `Constraints []TypeConstraint` field on `FnDef` and `FnSignature`
+- `parseWhereConstraints()` in `pkg/parser/parser.go` — parses comma-separated `T: TraitName` entries after effects
+- Disambiguation guard in `parseOptionOrRefinementType` — `WHERE TYPE_IDENT COLON` pattern is left for `parseFnDef` to consume (not treated as a refinement); preserves existing `Int where self >= 0` behavior
+- `ErrConstraintNotSatisfied ErrorCode = "CONSTRAINT_NOT_SATISFIED"` in `pkg/checker/errors.go`
+- `fnConstraints map[string][]ast.TypeConstraint` field on `Checker` (parallel to `fnEffects`)
+- `validateConstraintDeclarations()` pass (Pass 3.6) — validates all where-clause trait names exist and are `KindInterface`
+- `pkg/checker/constraints_test.go` — **NEW**: 14 tests (declaration, undefined trait, non-trait, call-site satisfied/unsatisfied, multiple constraints, effects+constraints, multi-TypeParam, unconstrained generic, trait signature, refinement guard)
+- `pkg/interpreter/constraints_test.go` — **NEW**: 10 tests (runtime execution of constrained fns, multiple constraints, two TypeParams, impl method dispatch in body, refinement types still enforced)
+
+### Changed
+- `registerFnDef` — stores `fn.Constraints` in `fnConstraints`
+- `registerImplMethod` — stores `fn.Constraints` in `fnConstraints` under qualified name
+- `inferCallExpr` generic branch — after `collectTypeBindings` infers type arg mappings, checks each constraint: emits `ErrConstraintNotSatisfied` if concrete type is a struct that doesn't satisfy the required interface
+- `Check()` — wires in `validateConstraintDeclarations()` as Pass 3.6 between `validateImplBlocks()` and `registerConstants()`
+
+### Files Changed
+- `pkg/ast/ast.go` — Added `TypeConstraint`; added `Constraints` to `FnDef` and `FnSignature`
+- `pkg/parser/parser.go` — Added `parseWhereConstraints`, disambiguation guard, wired into `parseFnDef` and `parseFnSignature`
+- `pkg/checker/checker.go` — Added `fnConstraints` field, `validateConstraintDeclarations`, constraint check in `inferCallExpr`
+- `pkg/checker/errors.go` — Added `ErrConstraintNotSatisfied`
+- `pkg/checker/constraints_test.go` — **NEW**: 14 tests
+- `pkg/interpreter/constraints_test.go` — **NEW**: 10 tests
+
+**Total tests:** 1096 (all passing, race-clean)
+
+---
+
+## [v1.0.0-alpha.2] — 2026-03-23
+
+### Phase 3.3 Chunk 2: Interface Types
+
+Structural interfaces ("Go-style traits") are now fully supported. A struct satisfies an interface if it has all required methods — checked statically by the type checker and dispatched dynamically at runtime.
+
+### Added
+- `KindInterface` type kind and `NewInterfaceType(name string, methods []*Field) *Type` constructor in `pkg/types/types.go`
+- `parseFnSignature(vis Visibility) *FnSignature` in `pkg/parser/parser.go` — parses function signatures without bodies for use in trait/interface declarations
+- `ErrMissingMethod ErrorCode = "MISSING_METHOD"` in `pkg/checker/errors.go`
+- `validateImplBlocks()` pass in checker (Pass 3.5) — verifies all trait methods are implemented and return types match
+- `structSatisfiesInterface(structType, ifaceType *types.Type) bool` checker helper — used in `checkLetStmt` and `inferCallExpr`
+- `resolveImplTargetName(te ast.TypeExpr) string` and `registerImplMethod(typeName string, fn *ast.FnDef)` in checker — registers impl methods as `"TypeName.methodName"` to avoid collisions
+- `implMethods map[string]map[string]*FunctionVal` field on `Environment` — global dispatch table, stored at root env
+- `DefineImplMethod(typeName, methodName string, fn *FunctionVal)` and `GetImplMethod(typeName, methodName string) (*FunctionVal, bool)` on `Environment`
+- `pkg/checker/interfaces_test.go` — **NEW**: 16 tests (trait declarations, impl validation, interface annotations, structural satisfaction, error cases)
+- `pkg/interpreter/interfaces_test.go` — **NEW**: 12 tests (method calls, field access, multiple types, inherent impls, interface dispatch, multi-param methods)
+
+### Changed
+- `parseTraitDef` — now calls `parseFnSignature` instead of `parseFnDef` for trait members (no body expected in trait)
+- `registerTraitDef` — now builds a real `KindInterface` type and registers it in `typeReg` (was a no-op)
+- `registerFunctions` — impl block handling now calls `registerImplMethod` with qualified names (was skipped)
+- `IsAssignableTo` — `KindInterface` + `KindStruct` from-type returns `true` (structural check is deferred to checker)
+- `evalFieldAccess` `*StructVal` case — checks `env.GetImplMethod` before panicking; returns `*BuiltinFnVal` closure that prepends receiver as first arg
+- Module init loop in interpreter — `*ast.ImplBlock` now registers all methods via `DefineImplMethod`
+
+### Files Changed
+- `pkg/parser/parser.go` — Added `parseFnSignature`; changed `parseTraitDef` to use it
+- `pkg/types/types.go` — Added `KindInterface`, `NewInterfaceType`; updated `String()`, `SubstituteTypeParams`, `IsAssignableTo`
+- `pkg/checker/checker.go` — Added `validateImplBlocks`, `structSatisfiesInterface`, `resolveImplTargetName`, `registerImplMethod`; wired `validateImplBlocks` into `Check()`; updated `checkLetStmt` and `inferCallExpr`
+- `pkg/checker/errors.go` — Added `ErrMissingMethod`
+- `pkg/interpreter/env.go` — Added `implMethods` field, `root()`, `DefineImplMethod`, `GetImplMethod`
+- `pkg/interpreter/interpreter.go` — `*ast.ImplBlock` case now registers impl methods
+- `pkg/interpreter/eval.go` — `*StructVal` case in `evalFieldAccess` now dispatches to impl methods
+- `pkg/checker/interfaces_test.go` — **NEW**: 16 tests
+- `pkg/interpreter/interfaces_test.go` — **NEW**: 12 tests
+
+**Total tests:** 1072 (all passing, race-clean)
+
+---
+
+## [v1.0.0-alpha.1] — 2026-03-23
+
+### Phase 3.3 Chunk 1: Generic Types and Functions
+
+Generic type parameters are now fully supported across the checker and work transparently in the interpreter (type erasure).
+
+### Added
+- `SubstituteTypeParams(bindings map[string]*Type) *Type` on `*types.Type` — recursively replaces `KindTypeParam` nodes with bound concrete types; handles all 19 type kinds; never mutates the registry type
+- `withTypeParams(params []string, fn func())` on `Checker` — temporarily activates type parameter bindings; used by all 4 registration passes and body checking so `T` resolves correctly instead of emitting `ErrUndefinedType`
+- `collectTypeBindings(param, arg *types.Type, bindings map[string]*types.Type)` — package-level helper that infers `{T → ConcreteType}` substitution mappings by walking parameter/argument type pairs at call sites
+- `typeParamBindings map[string]*types.Type` field on `Checker` (nil = not in generic context)
+- `IsAssignableTo`: `KindTypeParam` is assignable to/from anything (type erasure); List/Set/Option covariance added
+- `pkg/checker/generics_test.go` — **NEW**: 25 checker tests (declarations, body checking, call-site inference, struct/enum instantiation, error cases)
+- `pkg/interpreter/generics_test.go` — **NEW**: 15 interpreter tests (generic fns, structs, enums, collections, polymorphic use)
+
+### Changed
+- `resolveNamedType` — checks `typeParamBindings` before registry lookup; applies full `SubstituteTypeParams` on generic instantiation (was shallow copy); validates type arg count and emits `ErrTypeParamCount`
+- `registerTypeDef`, `registerStructDef`, `registerEnumDef`, `registerFnDef` — wrapped with `withTypeParams` so field/param type resolution succeeds for generic definitions
+- `checkFnBody` — wrapped with `withTypeParams`; skips default-value type check when param type is a TypeParam placeholder
+- `inferCallExpr` — infers type arg bindings and substitutes through return type for generic function calls
+
+### Files Changed
+- `pkg/types/types.go` — Added `SubstituteTypeParams`, TypeParam/covariance rules in `IsAssignableTo`
+- `pkg/checker/checker.go` — Added `typeParamBindings` field, `withTypeParams`, `collectTypeBindings`; modified `resolveNamedType`, `checkFnBody`, `inferCallExpr`, all 4 registration functions
+- `pkg/checker/generics_test.go` — **NEW**: 25 tests
+- `pkg/interpreter/generics_test.go` — **NEW**: 15 tests
+
+**No changes to:** `pkg/ast/`, `pkg/parser/`, `pkg/interpreter/` runtime code (scaffolding was already in place; interpreter works dynamically)
+
+**Total tests:** 1044 (all passing)
+
+---
+
 ## [v0.9.1] — 2026-03-23
 
 ### Refinement Type Runtime Enforcement (Issue #8)

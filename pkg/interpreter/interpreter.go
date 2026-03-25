@@ -435,7 +435,19 @@ func (interp *Interpreter) Run() (result Value, err error) {
                 case *ast.TraitDef:
                         // Traits: no runtime effect for now
                 case *ast.ImplBlock:
-                        // Impl blocks: no runtime effect for now
+                        targetName := ""
+                        if nt, ok := it.TargetType.(*ast.NamedType); ok {
+                                targetName = nt.Name
+                        }
+                        for _, method := range it.Methods {
+                                fn := &FunctionVal{
+                                        Name:   method.Name,
+                                        Params: method.Params,
+                                        Body:   method.Body,
+                                        Env:    interp.env,
+                                }
+                                interp.env.DefineImplMethod(targetName, method.Name, fn)
+                        }
                 case *ast.SpecBlock:
                         // Specs: no runtime effect
                 case *ast.TestBlock:

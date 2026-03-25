@@ -48,6 +48,12 @@ const (
 	// Generic errors
 	ErrTypeParamCount   ErrorCode = "TYPE_PARAM_COUNT"
 	ErrInvalidOperation ErrorCode = "INVALID_OPERATION"
+
+	// Interface errors
+	ErrMissingMethod ErrorCode = "MISSING_METHOD"
+
+	// Constraint errors
+	ErrConstraintNotSatisfied ErrorCode = "CONSTRAINT_NOT_SATISFIED"
 )
 
 // Severity indicates the severity of a diagnostic.

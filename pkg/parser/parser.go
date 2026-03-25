@@ -326,6 +326,26 @@ func (p *Parser) parseOptionalTypeParams() []string {
         return params
 }
 
+// parseWhereConstraints parses an optional "where T: Trait, U: Trait" clause.
+func (p *Parser) parseWhereConstraints() []ast.TypeConstraint {
+        if !p.check(token.WHERE) {
+                return nil
+        }
+        p.advance()
+        var constraints []ast.TypeConstraint
+        for {
+                typeParam := p.expectTypeName()
+                p.expect(token.COLON)
+                traitName := p.expectTypeName()
+                constraints = append(constraints, ast.TypeConstraint{TypeParam: typeParam, TraitName: traitName})
+                if !p.check(token.COMMA) {
+                        break
+                }
+                p.advance()
+        }
+        return constraints
+}
+
 // --- Type expressions ---
 
 func (p *Parser) parseTypeExpr() ast.TypeExpr {
@@ -373,7 +393,8 @@ func (p *Parser) parseOptionOrRefinementType() ast.TypeExpr {
         }
 
         // Refinement type: T where predicate
-        if p.check(token.WHERE) {
+        // Guard: WHERE TYPE_IDENT COLON is a function constraint, not a refinement — leave it
+        if p.check(token.WHERE) && !(p.peekAt(1) == token.TYPE_IDENT && p.peekAt(2) == token.COLON) {
                 p.advance()
                 pred := p.parseExpr()
                 base = &ast.RefinementType{
@@ -651,8 +672,8 @@ func (p *Parser) parseTraitDef(vis ast.Visibility) *ast.TraitDef {
                 if p.check(token.DEDENT) || p.check(token.EOF) {
                         break
                 }
-                // Parse function signature or definition
-                member := p.parseFnDef(ast.Private)
+                // Parse function signature (no body) for trait declarations
+                member := p.parseFnSignature(ast.Private)
                 td.Members = append(td.Members, member)
         }
 
@@ -662,6 +683,50 @@ func (p *Parser) parseTraitDef(vis ast.Visibility) *ast.TraitDef {
 
         td.Span = p.makeSpan(start)
         return td
+}
+
+// parseFnSignature parses a function signature (no body) for use in trait declarations.
+func (p *Parser) parseFnSignature(vis ast.Visibility) *ast.FnSignature {
+        start := p.current().Pos
+        p.expect(token.FN)
+
+        sig := &ast.FnSignature{Visibility: vis}
+
+        // Function name
+        tok := p.current()
+        if tok.Type == token.IDENT || tok.Type == token.TYPE_IDENT || tok.Type.IsKeyword() {
+                sig.Name = tok.Literal
+                p.advance()
+        } else {
+                p.addError(fmt.Sprintf("expected function name, got %s", tok.Type))
+        }
+
+        sig.TypeParams = p.parseOptionalTypeParams()
+
+        // Parameters
+        p.expect(token.LPAREN)
+        if !p.check(token.RPAREN) {
+                sig.Params = p.parseParamList()
+        }
+        p.expect(token.RPAREN)
+
+        // Return type
+        if p.check(token.ARROW) {
+                p.advance()
+                sig.ReturnType = p.parseTypeExpr()
+        }
+
+        // Effects
+        if p.check(token.WITH) {
+                p.advance()
+                sig.Effects = p.parseEffectList()
+        }
+
+        // Where constraints
+        sig.Constraints = p.parseWhereConstraints()
+
+        sig.Span = p.makeSpan(start)
+        return sig
 }
 
 // --- Impl blocks ---
@@ -936,6 +1001,9 @@ func (p *Parser) parseFnDef(vis ast.Visibility) *ast.FnDef {
                 p.advance()
                 fd.Effects = p.parseEffectList()
         }
+
+        // Where constraints
+        fd.Constraints = p.parseWhereConstraints()
 
         // Satisfies
         if p.check(token.SATISFIES) {

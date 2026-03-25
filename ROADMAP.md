@@ -33,9 +33,9 @@ These principles guide every phase of development. When evaluating features, tra
 | 2 | Semantic Analysis | ✅ COMPLETE | v0.2 | — |
 | 3.1 | Tree-Walk Interpreter | ✅ COMPLETE | v0.3 | — |
 | 3.2 | Pattern Matching (Advanced) | ✅ COMPLETE | v0.9.0 | — |
-| 3.3 | Advanced Type Features | 🔲 Not Started | v1.0.0 | 3–4 weeks |
+| 3.3 | Advanced Type Features | ✅ COMPLETE (all 4 chunks) | v1.0.0 | — |
 | 4 | Runtime & Standard Library | ✅ COMPLETE (4.1 ✅, 4.2 ✅, 4.3 ✅) | v0.8.0 | — |
-| 5 | Advanced Tooling & Ecosystem | 🔲 Not Started | v1.1.0 | 4–6 weeks |
+| 5 | Advanced Tooling & Ecosystem | 🔲 Not Started (next) | v1.1.0 | 4–6 weeks |
 | 6 | Compiler & Native Compilation | 🔲 Not Started | v2.0.0 | 9–12 weeks |
 
 ---
@@ -219,18 +219,19 @@ The tree-walk interpreter is the **highest-impact next step** for the AI-first m
 
 **Tests added:** 89 new tests (25 + 33 + 19 + 12 across 4 chunks)
 
-### 3.3 Advanced Type Features — 🔲 NOT STARTED
+### 3.3 Advanced Type Features — 🔄 IN PROGRESS
 
 **Complexity:** Medium-High | **Estimate:** 3–4 weeks | **Target:** v1.0.0
 
 > 🤖 **AI optimization:** Generics and improved type inference allow AI to generate reusable, type-safe code. Interface types provide the contract system that AI agents need to understand API boundaries without reading implementation details.
 
-- [ ] Generic types and functions (type parameters with constraints)
-- [ ] Improved type inference (bidirectional, constraint-based)
-- [ ] Interface types (structural typing, trait-like behavior)
-- [ ] Type constraints (`where` clauses for generics)
-- [ ] Higher-kinded types (if needed for stdlib design)
-- [ ] Type aliases with generic parameters
+- [x] **Chunk 1: Generic types and functions** — `fn identity[T]`, `struct Pair[A,B]`, `enum Tree[T]`, type arg inference at call sites, `SubstituteTypeParams`, `withTypeParams` scope, List/Set/Option covariance in assignability (v1.0.0-alpha.1, +40 tests)
+- [x] **Chunk 2: Interface types** — structural typing via `KindInterface`, `validateImplBlocks`, impl method dispatch, `structSatisfiesInterface`, qualified method names, inherent impls, runtime method dispatch via `evalFieldAccess` (v1.0.0-alpha.2, +28 tests)
+- [x] **Chunk 3: Type constraints and `where` clauses** — `TypeConstraint` AST node, `parseWhereConstraints`, disambiguation guard for refinements, `fnConstraints` map, `validateConstraintDeclarations` pass, `ErrConstraintNotSatisfied`, call-site enforcement via `inferCallExpr` (v1.0.0-alpha.3, +24 tests)
+- [x] **Chunk 4: Improved type inference** — `inferExprWithHint`, annotation-guided empty collection inference, bidirectional constructor inference (`Some/Ok/Err` argument type checking), generic type alias tests (`type Maybe[T] = Option[T]`, `type Wrapper[T] = [T]`) (v1.0.0, +24 tests) — `TypeConstraint` AST node, `parseWhereConstraints`, disambiguation guard for refinements, `fnConstraints` map, `validateConstraintDeclarations` pass, `ErrConstraintNotSatisfied`, call-site enforcement via `inferCallExpr` (v1.0.0-alpha.3, +24 tests)
+- [ ] Chunk 3: Type constraints (`where` clauses for generics)
+- [ ] Chunk 4: Improved type inference (bidirectional, empty collection inference)
+- [ ] Higher-kinded types (deferred — only if stdlib demands it)
 - [ ] Refinement type static evaluation (deferred from Phase 2)
 
 **Package:** `pkg/types`, `pkg/checker`, `pkg/interpreter`
@@ -653,3 +654,9 @@ See [DEVELOPMENT.md](DEVELOPMENT.md) for setup instructions, architecture overvi
 | 2026-03-23 | v0.9.0-alpha.2 | Phase 3.2 Chunk 2 — Tuple, list, constructor, spread patterns, 33 new tests (963 total) |
 | 2026-03-23 | v0.9.0-alpha.3 | Phase 3.2 Chunk 3 — Guard clauses, or-patterns, binding patterns (as), 19 new tests (982 total) |
 | 2026-03-23 | v0.9.0 | **Phase 3.2 complete** — Exhaustiveness checking (enum + Bool), inferMatchExpr, patternCoversVariants, 12 new tests (994 total) |
+| 2026-03-23 | v0.9.1 | Issue #8 — Refinement type runtime enforcement, `enforceRefinement()`, 10 new tests (1004 total) |
+| 2026-03-23 | v1.0.0-alpha.1 | **Phase 3.3 Chunk 1** — Generic types and functions: `SubstituteTypeParams`, `withTypeParams`, call-site type arg inference, List/Set/Option covariance, 40 new tests (1044 total) |
+| 2026-03-23 | v1.0.0-alpha.2 | **Phase 3.3 Chunk 2** — Interface types: `KindInterface`, structural satisfaction, impl method dispatch, `validateImplBlocks`, qualified names, runtime dispatch in `evalFieldAccess`, 28 new tests (1072 total) |
+| 2026-03-24 | v1.0.0-alpha.3 | **Phase 3.3 Chunk 3** — Type constraints: `TypeConstraint` AST, `parseWhereConstraints`, WHERE guard for refinements, `fnConstraints` map, `validateConstraintDeclarations`, `ErrConstraintNotSatisfied`, call-site enforcement in `inferCallExpr`, 24 new tests (1096 total) |
+| 2026-03-24 | v1.0.0 | **Phase 3.3 Chunk 4** — Improved type inference: `inferExprWithHint`, empty collection inference, `Some/Ok/Err` bidirectional checking, generic type aliases documented, 24 new tests (1120 total) |
+| 2026-03-24 | v1.0.0 | **Issue #11** — String concat O(n²) fixed: `collectConcatLeaves` + `evalConcatChain` in eval.go, 1 new test (1121 total). No open debt remaining. |

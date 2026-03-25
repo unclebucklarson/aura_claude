@@ -8,15 +8,15 @@
 
 | | |
 |--|--|
-| **Version** | v0.9.1 |
-| **Tests** | 1004 (all passing) |
-| **Phases complete** | 1, 2, 3.1, 3.1.1, 3.2 (all chunks), 4, Issue #8 |
+| **Version** | v1.0.0 |
+| **Tests** | 1121 (all passing) |
+| **Phases complete** | 1, 2, 3.1, 3.1.1, 3.2 (all chunks), 3.3 (all chunks ✅), 4, Issue #8, Issue #11 |
 
 | Package | Tests |
 |---------|-------|
-| pkg/checker | 61 |
+| pkg/checker | 129 |
 | pkg/formatter | 9 |
-| pkg/interpreter | 855 |
+| pkg/interpreter | 904 |
 | pkg/lexer | 11 |
 | pkg/module | 17 |
 | pkg/parser | 16 |
@@ -30,64 +30,43 @@
 | # | Item | Status |
 |---|------|--------|
 | 8 | Refinement type runtime enforcement | ✅ Done v0.9.1 |
-| 11 | String concatenation O(n²) | 📋 Documented — low priority |
+| 11 | String concatenation O(n²) | ✅ Done — `collectConcatLeaves` + `evalConcatChain` in eval.go |
+
+**No open debt remaining.**
 
 ---
 
-## Next: Phase 3.3 — Advanced Type Features
+## Next: Phase 5 — Advanced Tooling & Ecosystem
 
-**Target:** v1.0.0 | **Est. tests:** +100–150 | **Roadmap:** `ROADMAP.md` §3.3
+**Target:** v1.1.0 | **Roadmap:** `ROADMAP.md` §5
 
-### Design decisions to settle first
+All language features are stable (Phases 1–4, 3.3 complete). Phase 5 builds the developer experience and ecosystem on top of the current interpreter.
 
-1. **Generic syntax** — use `[T]` notation: `fn identity[T](x: T) -> T`. Confirm before touching the parser (many parse paths affected).
-2. **Trait vs Interface** — the AST already has `TraitDef` and the `trait` keyword. Reuse it; call it "interface" only in user docs. No new keyword.
-3. **Monomorphization vs type erasure** — use type erasure in the interpreter (pass types at runtime via `Any`-typed dispatch). Monomorphization is a Phase 6 (compiler) concern.
-4. **Higher-kinded types** — do NOT implement in Phase 3.3. Defer unless a concrete stdlib use case demands it.
+### Recommended order (lowest to highest complexity)
 
-### Chunk 1 — Generic Types and Functions (v1.0.0-alpha.1)
+| Section | Item | Complexity | Estimate |
+|---------|------|-----------|----------|
+| 5.4 | **Documentation Generator** (`aura doc`) | Low-Medium | 1–2 weeks |
+| 5.5 | **REPL** (enhance existing stub) | Medium | 2 weeks |
+| 5.3 | **AI Integration** (spec-to-impl pipeline) | Medium | 2–3 weeks |
+| 5.2 | **Package Manager** | Medium | 3–4 weeks |
+| 5.1 | **LSP** (`cmd/aura-lsp`) | High | 4–6 weeks |
 
-**Effort:** ~1 week | **Tests:** ~40
+### Design decisions to settle before starting
 
-**What to build:**
-- Generic function declarations: `fn identity[T](x: T) -> T`
-- Generic struct declarations: `struct Pair[A, B]: first: A; second: B`
-- Generic enum declarations: `enum Tree[T]: Leaf; Node(T, Tree[T], Tree[T])`
-- Type parameter substitution at instantiation
-- Type argument inference at call sites: `identity(42)` infers `T = Int`
+1. **5.4 Doc Generator** — output format: Markdown (simpler, no external deps) vs. HTML (richer). Recommend Markdown first, HTML as a follow-up.
+2. **5.5 REPL** — `aura repl` is already stubbed in `cmd/aura`. Decide scope: expression-only vs. full statement support, `:type` introspection depth.
+3. **5.3 AI Integration** — requires Claude API key in environment; not pure stdlib. Decide if this is in-process or a CLI pipeline.
+4. **5.1 LSP** — requires `gopls`-style architecture; most impactful but most complex. Can be deferred until after 5.4/5.5/5.3.
 
-**Key files:** `pkg/ast/ast.go`, `pkg/parser/parser.go`, `pkg/types/types.go`, `pkg/checker/checker.go`, `pkg/interpreter/eval.go`
+### Chunk 1 suggestion — 5.4 Documentation Generator
 
-**Non-obvious constraint:** `TypeDef`, `StructDef`, `EnumDef`, and `FnDef` AST nodes already have `TypeParams []string` — the field exists but is never used. The interpreter needs to bind type params during instantiation.
-
-### Chunk 2 — Interface Types (v1.0.0-alpha.2)
-
-**Effort:** ~1 week | **Tests:** ~30
+Start here: low risk, builds directly on the existing AST, no new dependencies.
 
 **What to build:**
-- Interface declaration reuses `TraitDef` AST node (already exists)
-- Structural typing: a struct satisfies an interface if it has all required methods
-- Interface type in function signatures: `fn display(x: Printable)`
-- Interface satisfaction check in the type checker
-- Runtime dispatch through interfaces in the interpreter
+- `aura doc <file>` CLI command
+- Walk AST, extract `##` doc comments attached to `FnDef`, `StructDef`, `EnumDef`, `TraitDef`, `SpecDef`
+- Emit Markdown: function signatures with types + effects + doc text; struct fields; enum variants; spec guarantees/errors
+- `aura doc --json <file>` for structured output (AI-consumable)
 
-### Chunk 3 — Type Constraints and `where` Clauses (v1.0.0-alpha.3)
-
-**Effort:** ~4 days | **Tests:** ~25
-
-**What to build:**
-- `where` clauses on generic functions: `fn show[T](x: T) -> String where T: Printable`
-- Constraint satisfaction checking at instantiation
-- Multiple constraints: `where T: Printable, T: Comparable`
-- Built-in constraints: `Eq`, `Ord`, `Display`
-
-**Key file:** need a new `WhereClause` AST node, or extend `FnDef`.
-
-### Chunk 4 — Improved Type Inference (v1.0.0)
-
-**Effort:** ~4 days | **Tests:** ~20
-
-**What to build:**
-- Push expected type into sub-expressions (bidirectional inference improvements)
-- Type alias with generic parameters: `type Result[T] = Ok(T) | Err(String)`
-- Empty collection inference: `let xs: List[Int] = []` infers element type from annotation
+**Key files:** `cmd/aura/main.go` (new subcommand), new `pkg/docgen/docgen.go`

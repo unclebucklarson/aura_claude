@@ -422,6 +422,16 @@ fn greet() -> String:
         expectString(t, result, "hello world")
 }
 
+func TestStringConcatChain(t *testing.T) {
+        // Exercises the strings.Builder fast path for chains of 3+ operands.
+        src := `module test
+fn build() -> String:
+    return "a" + "b" + "c" + "d" + "e"
+`
+        result := runFunc(t, src, "build", nil)
+        expectString(t, result, "abcde")
+}
+
 func TestComparisonOps(t *testing.T) {
         src := `module test
 fn lt() -> Bool:

@@ -31,6 +31,7 @@ const (
         KindAny        // top type
         KindNone       // the None/unit type
         KindAlias      // type alias
+        KindInterface  // interface/trait type (structural)
 )
 
 func (k TypeKind) String() string {
@@ -38,7 +39,7 @@ func (k TypeKind) String() string {
                 "primitive", "struct", "enum", "union", "intersection",
                 "function", "tuple", "list", "map", "set", "option", "result",
                 "refinement", "string_literal", "type_param", "never", "any",
-                "none", "alias",
+                "none", "alias", "interface",
         }
         if int(k) < len(names) {
                 return names[k]
@@ -175,6 +176,92 @@ func NewAliasType(name string, base *Type) *Type {
         return &Type{Kind: KindAlias, Name: name, BaseT: base}
 }
 
+// NewInterfaceType creates an interface (trait) type with named method signatures.
+func NewInterfaceType(name string, methods []*Field) *Type {
+        return &Type{Kind: KindInterface, Name: name, Fields: methods}
+}
+
+// SubstituteTypeParams returns a copy of t with all KindTypeParam nodes replaced
+// according to bindings. The original type is never mutated.
+func (t *Type) SubstituteTypeParams(bindings map[string]*Type) *Type {
+	if t == nil {
+		return nil
+	}
+	switch t.Kind {
+	case KindTypeParam:
+		if sub, ok := bindings[t.Name]; ok {
+			return sub
+		}
+		return t
+	case KindPrimitive, KindNone, KindNever, KindAny, KindStringLit:
+		return t
+	case KindList, KindSet, KindOption:
+		inst := *t
+		inst.ElementT = t.ElementT.SubstituteTypeParams(bindings)
+		return &inst
+	case KindResult:
+		inst := *t
+		inst.ElementT = t.ElementT.SubstituteTypeParams(bindings)
+		inst.ValueT = t.ValueT.SubstituteTypeParams(bindings)
+		return &inst
+	case KindMap:
+		inst := *t
+		inst.KeyT = t.KeyT.SubstituteTypeParams(bindings)
+		inst.ValueT = t.ValueT.SubstituteTypeParams(bindings)
+		return &inst
+	case KindTuple, KindUnion, KindIntersection:
+		inst := *t
+		inst.Members = make([]*Type, len(t.Members))
+		for i, m := range t.Members {
+			inst.Members[i] = m.SubstituteTypeParams(bindings)
+		}
+		return &inst
+	case KindFunction:
+		inst := *t
+		inst.ParamTypes = make([]*Type, len(t.ParamTypes))
+		for i, p := range t.ParamTypes {
+			inst.ParamTypes[i] = p.SubstituteTypeParams(bindings)
+		}
+		inst.ReturnT = t.ReturnT.SubstituteTypeParams(bindings)
+		return &inst
+	case KindStruct:
+		inst := *t
+		inst.Fields = make([]*Field, len(t.Fields))
+		for i, f := range t.Fields {
+			nf := *f
+			nf.Type = f.Type.SubstituteTypeParams(bindings)
+			inst.Fields[i] = &nf
+		}
+		return &inst
+	case KindEnum:
+		inst := *t
+		inst.Variants = make([]*Variant, len(t.Variants))
+		for i, v := range t.Variants {
+			nv := *v
+			nv.Fields = make([]*Type, len(v.Fields))
+			for j, f := range v.Fields {
+				nv.Fields[j] = f.SubstituteTypeParams(bindings)
+			}
+			inst.Variants[i] = &nv
+		}
+		return &inst
+	case KindRefinement, KindAlias:
+		inst := *t
+		inst.BaseT = t.BaseT.SubstituteTypeParams(bindings)
+		return &inst
+	case KindInterface:
+		inst := *t
+		inst.Fields = make([]*Field, len(t.Fields))
+		for i, f := range t.Fields {
+			nf := *f
+			nf.Type = f.Type.SubstituteTypeParams(bindings)
+			inst.Fields[i] = &nf
+		}
+		return &inst
+	}
+	return t
+}
+
 // --- Type display ---
 
 // String returns a human-readable representation of the type.
@@ -246,6 +333,8 @@ func (t *Type) String() string {
         case KindStringLit:
                 return fmt.Sprintf("%q", t.StringVal)
         case KindAlias:
+                return t.Name
+        case KindInterface:
                 return t.Name
         default:
                 return fmt.Sprintf("<unknown:%s>", t.Kind)
@@ -360,6 +449,27 @@ func IsAssignableTo(from, to *Type) bool {
         // Any (unknown) is assignable to anything (for inference gaps)
         if from.Kind == KindAny {
                 return true
+        }
+
+        // TypeParam is treated as Any for assignment purposes (type erasure)
+        if from.Kind == KindTypeParam || to.Kind == KindTypeParam {
+                return true
+        }
+
+        // Interface satisfaction: structural check is done by the checker
+        if to.Kind == KindInterface && from.Kind == KindStruct {
+                return true
+        }
+
+        // List/Set/Option covariance
+        if from.Kind == KindList && to.Kind == KindList {
+                return IsAssignableTo(from.ElementT, to.ElementT)
+        }
+        if from.Kind == KindSet && to.Kind == KindSet {
+                return IsAssignableTo(from.ElementT, to.ElementT)
+        }
+        if from.Kind == KindOption && to.Kind == KindOption {
+                return IsAssignableTo(from.ElementT, to.ElementT)
         }
 
         // None is assignable to Option[T]

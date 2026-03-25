@@ -235,18 +235,25 @@ func (n *SpecError) GetSpan() token.Span { return n.Span }
 
 // --- Function Definitions ---
 
+// TypeConstraint represents a single "T: TraitName" entry in a where clause.
+type TypeConstraint struct {
+        TypeParam string // e.g. "T"
+        TraitName string // e.g. "Printable"
+}
+
 // FnDef represents a function definition.
 type FnDef struct {
-        Span       token.Span
-        Name       string
-        TypeParams []string
-        Params     []*Param
-        ReturnType TypeExpr
-        Effects    []string
-        Satisfies  string
-        Visibility Visibility
-        Body       []Statement
-        Comments   []Comment
+        Span        token.Span
+        Name        string
+        TypeParams  []string
+        Params      []*Param
+        ReturnType  TypeExpr
+        Effects     []string
+        Constraints []TypeConstraint
+        Satisfies   string
+        Visibility  Visibility
+        Body        []Statement
+        Comments    []Comment
 }
 
 func (n *FnDef) nodeType() string    { return "FnDef" }
@@ -256,13 +263,14 @@ func (n *FnDef) isTraitMember()      {}
 
 // FnSignature represents just a function signature (in traits).
 type FnSignature struct {
-        Span       token.Span
-        Name       string
-        TypeParams []string
-        Params     []*Param
-        ReturnType TypeExpr
-        Effects    []string
-        Visibility Visibility
+        Span        token.Span
+        Name        string
+        TypeParams  []string
+        Params      []*Param
+        ReturnType  TypeExpr
+        Effects     []string
+        Constraints []TypeConstraint
+        Visibility  Visibility
 }
 
 func (n *FnSignature) nodeType() string    { return "FnSignature" }

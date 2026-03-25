@@ -30,6 +30,13 @@ type Checker struct {
         fnTypes map[string]*types.Type // fn name -> function type
         // Variable type tracking (symbol name in scope -> resolved type)
         varTypes map[string]*types.Type
+
+        // Active type parameter bindings while checking a generic definition.
+        // nil when not inside a generic context.
+        typeParamBindings map[string]*types.Type
+
+        // Function where-clause constraints (fn name -> constraints)
+        fnConstraints map[string][]ast.TypeConstraint
 }
 
 // New creates a new Checker for the given module.
@@ -42,10 +49,11 @@ func New(module *ast.Module) *Checker {
                 module:   module,
                 symTable: symbols.NewTable(moduleName),
                 typeReg:  types.NewRegistry(),
-                specs:    make(map[string]*ast.SpecBlock),
-                fnEffects: make(map[string][]string),
-                fnTypes:  make(map[string]*types.Type),
-                varTypes: make(map[string]*types.Type),
+                specs:         make(map[string]*ast.SpecBlock),
+                fnEffects:     make(map[string][]string),
+                fnTypes:       make(map[string]*types.Type),
+                varTypes:      make(map[string]*types.Type),
+                fnConstraints: make(map[string][]ast.TypeConstraint),
         }
 }
 
@@ -61,6 +69,12 @@ func (c *Checker) Check() []*CheckError {
 
         // Pass 3: Register all function signatures
         c.registerFunctions()
+
+        // Pass 3.5: Validate impl blocks against trait declarations
+        c.validateImplBlocks()
+
+        // Pass 3.6: Validate where-clause constraint declarations
+        c.validateConstraintDeclarations()
 
         // Pass 4: Register constants
         c.registerConstants()
@@ -92,6 +106,23 @@ func (c *Checker) errorf(code ErrorCode, span token.Span, format string, args ..
         c.addError(newError(code, span, fmt.Sprintf(format, args...)))
 }
 
+// withTypeParams temporarily activates type parameter bindings while fn runs.
+// Used by all registration passes and body checking for generic definitions.
+func (c *Checker) withTypeParams(params []string, fn func()) {
+        if len(params) == 0 {
+                fn()
+                return
+        }
+        prev := c.typeParamBindings
+        b := make(map[string]*types.Type, len(params))
+        for _, p := range params {
+                b[p] = types.NewTypeParam(p)
+        }
+        c.typeParamBindings = b
+        fn()
+        c.typeParamBindings = prev
+}
+
 // --- Pass 1: Register Types ---
 
 func (c *Checker) registerTypes() {
@@ -110,7 +141,10 @@ func (c *Checker) registerTypes() {
 }
 
 func (c *Checker) registerTypeDef(td *ast.TypeDef) {
-        bodyType := c.resolveTypeExpr(td.Body)
+        var bodyType *types.Type
+        c.withTypeParams(td.TypeParams, func() {
+                bodyType = c.resolveTypeExpr(td.Body)
+        })
         aliasType := types.NewAliasType(td.Name, bodyType)
         aliasType.TypeParams = td.TypeParams
 
@@ -131,15 +165,17 @@ func (c *Checker) registerTypeDef(td *ast.TypeDef) {
 
 func (c *Checker) registerStructDef(sd *ast.StructDef) {
         fields := make([]*types.Field, len(sd.Fields))
-        for i, f := range sd.Fields {
-                ft := c.resolveTypeExpr(f.TypeExpr)
-                fields[i] = &types.Field{
-                        Name:     f.Name,
-                        Type:     ft,
-                        Optional: f.Default != nil,
-                        Public:   f.Visibility == ast.Public,
+        c.withTypeParams(sd.TypeParams, func() {
+                for i, f := range sd.Fields {
+                        ft := c.resolveTypeExpr(f.TypeExpr)
+                        fields[i] = &types.Field{
+                                Name:     f.Name,
+                                Type:     ft,
+                                Optional: f.Default != nil,
+                                Public:   f.Visibility == ast.Public,
+                        }
                 }
-        }
+        })
 
         structType := types.NewStructType(sd.Name, fields, sd.TypeParams)
         if err := c.typeReg.Register(sd.Name, structType); err != nil {
@@ -159,16 +195,18 @@ func (c *Checker) registerStructDef(sd *ast.StructDef) {
 
 func (c *Checker) registerEnumDef(ed *ast.EnumDef) {
         variants := make([]*types.Variant, len(ed.Variants))
-        for i, v := range ed.Variants {
-                vfields := make([]*types.Type, len(v.Fields))
-                for j, f := range v.Fields {
-                        vfields[j] = c.resolveTypeExpr(f)
+        c.withTypeParams(ed.TypeParams, func() {
+                for i, v := range ed.Variants {
+                        vfields := make([]*types.Type, len(v.Fields))
+                        for j, f := range v.Fields {
+                                vfields[j] = c.resolveTypeExpr(f)
+                        }
+                        variants[i] = &types.Variant{
+                                Name:   v.Name,
+                                Fields: vfields,
+                        }
                 }
-                variants[i] = &types.Variant{
-                        Name:   v.Name,
-                        Fields: vfields,
-                }
-        }
+        })
 
         enumType := types.NewEnumType(ed.Name, variants, ed.TypeParams)
         if err := c.typeReg.Register(ed.Name, enumType); err != nil {
@@ -197,6 +235,32 @@ func (c *Checker) registerEnumDef(ed *ast.EnumDef) {
 }
 
 func (c *Checker) registerTraitDef(td *ast.TraitDef) {
+        methods := make([]*types.Field, 0, len(td.Members))
+        c.withTypeParams(td.TypeParams, func() {
+                for _, member := range td.Members {
+                        sig, ok := member.(*ast.FnSignature)
+                        if !ok {
+                                continue
+                        }
+                        paramTypes := make([]*types.Type, len(sig.Params))
+                        for i, p := range sig.Params {
+                                paramTypes[i] = c.resolveTypeExpr(p.TypeExpr)
+                        }
+                        retType := types.BuiltinNone
+                        if sig.ReturnType != nil {
+                                retType = c.resolveTypeExpr(sig.ReturnType)
+                        }
+                        fnType := types.NewFunctionType(paramTypes, retType, sig.Effects)
+                        methods = append(methods, &types.Field{Name: sig.Name, Type: fnType})
+                }
+        })
+        ifaceType := types.NewInterfaceType(td.Name, methods)
+        ifaceType.TypeParams = td.TypeParams
+        if err := c.typeReg.Register(td.Name, ifaceType); err != nil {
+                c.addError(newError(ErrRedefinedType, td.Span,
+                        fmt.Sprintf("type %q is already defined", td.Name)))
+                return
+        }
         c.symTable.Define(&symbols.Symbol{
                 Name:       td.Name,
                 Kind:       symbols.SymTrait,
@@ -235,8 +299,9 @@ func (c *Checker) registerFunctions() {
                 case *ast.FnDef:
                         c.registerFnDef(n)
                 case *ast.ImplBlock:
+                        targetName := c.resolveImplTargetName(n.TargetType)
                         for _, method := range n.Methods {
-                                c.registerFnDef(method)
+                                c.registerImplMethod(targetName, method)
                         }
                 }
         }
@@ -244,20 +309,22 @@ func (c *Checker) registerFunctions() {
 
 func (c *Checker) registerFnDef(fn *ast.FnDef) {
         paramTypes := make([]*types.Type, len(fn.Params))
-        for i, p := range fn.Params {
-                paramTypes[i] = c.resolveTypeExpr(p.TypeExpr)
-        }
-
         retType := types.BuiltinNone
-        if fn.ReturnType != nil {
-                retType = c.resolveTypeExpr(fn.ReturnType)
-        }
+        c.withTypeParams(fn.TypeParams, func() {
+                for i, p := range fn.Params {
+                        paramTypes[i] = c.resolveTypeExpr(p.TypeExpr)
+                }
+                if fn.ReturnType != nil {
+                        retType = c.resolveTypeExpr(fn.ReturnType)
+                }
+        })
 
         fnType := types.NewFunctionType(paramTypes, retType, fn.Effects)
         fnType.TypeParams = fn.TypeParams
 
         c.fnTypes[fn.Name] = fnType
         c.fnEffects[fn.Name] = fn.Effects
+        c.fnConstraints[fn.Name] = fn.Constraints
 
         err := c.symTable.Define(&symbols.Symbol{
                 Name:       fn.Name,
@@ -271,6 +338,115 @@ func (c *Checker) registerFnDef(fn *ast.FnDef) {
         if err != nil {
                 c.addError(newError(ErrRedefinedName, fn.Span,
                         fmt.Sprintf("function %q is already defined", fn.Name)))
+        }
+}
+
+// resolveImplTargetName extracts the type name from an impl block's target type expression.
+func (c *Checker) resolveImplTargetName(te ast.TypeExpr) string {
+        if nt, ok := te.(*ast.NamedType); ok {
+                return nt.Name
+        }
+        return ""
+}
+
+// registerImplMethod registers an impl block method under a qualified name "TypeName.methodName".
+func (c *Checker) registerImplMethod(typeName string, fn *ast.FnDef) {
+        qualName := typeName + "." + fn.Name
+        paramTypes := make([]*types.Type, len(fn.Params))
+        retType := types.BuiltinNone
+        c.withTypeParams(fn.TypeParams, func() {
+                for i, p := range fn.Params {
+                        paramTypes[i] = c.resolveTypeExpr(p.TypeExpr)
+                }
+                if fn.ReturnType != nil {
+                        retType = c.resolveTypeExpr(fn.ReturnType)
+                }
+        })
+        fnType := types.NewFunctionType(paramTypes, retType, fn.Effects)
+        fnType.TypeParams = fn.TypeParams
+        c.fnTypes[qualName] = fnType
+        c.fnEffects[qualName] = fn.Effects
+        c.fnConstraints[qualName] = fn.Constraints
+        c.symTable.Define(&symbols.Symbol{
+                Name:   qualName,
+                Kind:   symbols.SymFunction,
+                Span:   fn.Span,
+                Public: fn.Visibility == ast.Public,
+        })
+}
+
+// validateImplBlocks checks that impl blocks for traits satisfy all required methods.
+func (c *Checker) validateImplBlocks() {
+        for _, item := range c.module.Items {
+                ib, ok := item.(*ast.ImplBlock)
+                if !ok || ib.TraitName == "" {
+                        continue
+                }
+
+                traitType, ok := c.typeReg.Lookup(ib.TraitName)
+                if !ok {
+                        c.addError(newError(ErrUndefinedType, ib.Span,
+                                fmt.Sprintf("undefined trait %q", ib.TraitName)))
+                        continue
+                }
+                if traitType.Kind != types.KindInterface {
+                        c.addError(newError(ErrTypeMismatch, ib.Span,
+                                fmt.Sprintf("%q is not a trait", ib.TraitName)))
+                        continue
+                }
+
+                targetName := c.resolveImplTargetName(ib.TargetType)
+                for _, required := range traitType.Fields {
+                        qualName := targetName + "." + required.Name
+                        implFnType, found := c.fnTypes[qualName]
+                        if !found {
+                                c.addError(newError(ErrMissingMethod, ib.Span,
+                                        fmt.Sprintf("impl %s for %s: missing method %q",
+                                                ib.TraitName, targetName, required.Name)))
+                                continue
+                        }
+                        // Check return type compatibility
+                        if required.Type.ReturnT != nil && implFnType.ReturnT != nil {
+                                if !types.IsAssignableTo(implFnType.ReturnT, required.Type.ReturnT) {
+                                        c.addError(newError(ErrTypeMismatch, ib.Span,
+                                                fmt.Sprintf("method %q: return type mismatch: want %s, got %s",
+                                                        required.Name, required.Type.ReturnT, implFnType.ReturnT)))
+                                }
+                        }
+                }
+        }
+}
+
+// structSatisfiesInterface returns true if all trait methods are registered for structType.
+func (c *Checker) structSatisfiesInterface(structType, ifaceType *types.Type) bool {
+        for _, method := range ifaceType.Fields {
+                qualName := structType.Name + "." + method.Name
+                if _, ok := c.fnTypes[qualName]; !ok {
+                        return false
+                }
+        }
+        return true
+}
+
+// validateConstraintDeclarations checks that all where-clause trait names are known interfaces.
+func (c *Checker) validateConstraintDeclarations() {
+        for _, item := range c.module.Items {
+                fn, ok := item.(*ast.FnDef)
+                if !ok {
+                        continue
+                }
+                for _, con := range fn.Constraints {
+                        t, ok := c.typeReg.Lookup(con.TraitName)
+                        if !ok {
+                                c.addError(newError(ErrUndefinedType, fn.Span,
+                                        fmt.Sprintf("undefined trait %q in where clause", con.TraitName)))
+                                continue
+                        }
+                        if t.Kind != types.KindInterface {
+                                c.addError(newError(ErrTypeMismatch, fn.Span,
+                                        fmt.Sprintf("%q is not a trait", con.TraitName)))
+                        }
+                }
         }
 }
 
@@ -316,47 +492,51 @@ func (c *Checker) checkFunctionBodies() {
 
 func (c *Checker) checkFnBody(fn *ast.FnDef) {
         c.currentFn = fn
-        c.currentFnReturn = types.BuiltinNone
-        if fn.ReturnType != nil {
-                c.currentFnReturn = c.resolveTypeExpr(fn.ReturnType)
-        }
         c.currentEffects = make(map[string]bool)
         for _, e := range fn.Effects {
                 c.currentEffects[e] = true
         }
 
-        // Push function scope
-        c.symTable.PushScope(symbols.ScopeFunction, fn.Name)
+        c.withTypeParams(fn.TypeParams, func() {
+                c.currentFnReturn = types.BuiltinNone
+                if fn.ReturnType != nil {
+                        c.currentFnReturn = c.resolveTypeExpr(fn.ReturnType)
+                }
 
-        // Register parameters
-        for _, p := range fn.Params {
-                paramType := c.resolveTypeExpr(p.TypeExpr)
-                c.symTable.Define(&symbols.Symbol{
-                        Name: p.Name,
-                        Kind: symbols.SymParam,
-                        Span: p.Span,
-                })
-                c.varTypes[p.Name] = paramType
+                // Push function scope
+                c.symTable.PushScope(symbols.ScopeFunction, fn.Name)
 
-                // Check default value type
-                if p.Default != nil {
-                        defType := c.inferExpr(p.Default)
-                        expected := c.resolveTypeExpr(p.TypeExpr)
-                        if !types.IsAssignableTo(defType, expected) {
-                                c.addError(newError(ErrTypeMismatch, p.Span,
-                                        fmt.Sprintf("default value for parameter %q: cannot assign %s to %s",
-                                                p.Name, defType, expected)).
-                                        withExpectedGot(expected.String(), defType.String()))
+                // Register parameters
+                for _, p := range fn.Params {
+                        paramType := c.resolveTypeExpr(p.TypeExpr)
+                        c.symTable.Define(&symbols.Symbol{
+                                Name: p.Name,
+                                Kind: symbols.SymParam,
+                                Span: p.Span,
+                        })
+                        c.varTypes[p.Name] = paramType
+
+                        // Check default value type (skip when param type is a type param placeholder)
+                        if p.Default != nil && paramType.Kind != types.KindTypeParam {
+                                defType := c.inferExpr(p.Default)
+                                expected := c.resolveTypeExpr(p.TypeExpr)
+                                if !types.IsAssignableTo(defType, expected) {
+                                        c.addError(newError(ErrTypeMismatch, p.Span,
+                                                fmt.Sprintf("default value for parameter %q: cannot assign %s to %s",
+                                                        p.Name, defType, expected)).
+                                                withExpectedGot(expected.String(), defType.String()))
+                                }
                         }
                 }
-        }
 
-        // Check body statements
-        for _, stmt := range fn.Body {
-                c.checkStatement(stmt)
-        }
+                // Check body statements
+                for _, stmt := range fn.Body {
+                        c.checkStatement(stmt)
+                }
 
-        c.symTable.PopScope()
+                c.symTable.PopScope()
+        })
+
         c.currentFn = nil
         c.currentFnReturn = nil
         c.currentEffects = nil
@@ -499,18 +679,36 @@ func (c *Checker) checkStatement(stmt ast.Statement) {
 
 func (c *Checker) checkLetStmt(s *ast.LetStmt) {
         var valType *types.Type
+        var resolvedType *types.Type
+
         if s.Value != nil {
-                valType = c.inferExpr(s.Value)
+                if s.TypeHint != nil {
+                        // Resolve annotation first so we can use it as inference hint.
+                        resolvedType = c.resolveTypeExpr(s.TypeHint)
+                        valType = c.inferExprWithHint(s.Value, resolvedType)
+                } else {
+                        valType = c.inferExpr(s.Value)
+                }
         }
 
-        var resolvedType *types.Type
         if s.TypeHint != nil {
-                resolvedType = c.resolveTypeExpr(s.TypeHint)
-                if valType != nil && !types.IsAssignableTo(valType, resolvedType) {
-                        c.addError(newError(ErrTypeMismatch, s.Span,
-                                fmt.Sprintf("cannot assign %s to variable %q of type %s",
-                                        valType, s.Name, resolvedType)).
-                                withExpectedGot(resolvedType.String(), valType.String()))
+                if resolvedType == nil {
+                        resolvedType = c.resolveTypeExpr(s.TypeHint)
+                }
+                if valType != nil {
+                        if resolvedType.Kind == types.KindInterface && valType.Kind == types.KindStruct {
+                                if !c.structSatisfiesInterface(valType, resolvedType) {
+                                        c.addError(newError(ErrTypeMismatch, s.Span,
+                                                fmt.Sprintf("struct %s does not implement interface %s",
+                                                        valType, resolvedType)).
+                                                withExpectedGot(resolvedType.String(), valType.String()))
+                                }
+                        } else if !types.IsAssignableTo(valType, resolvedType) {
+                                c.addError(newError(ErrTypeMismatch, s.Span,
+                                        fmt.Sprintf("cannot assign %s to variable %q of type %s",
+                                                valType, s.Name, resolvedType)).
+                                        withExpectedGot(resolvedType.String(), valType.String()))
+                        }
                 }
         } else if valType != nil {
                 resolvedType = valType
@@ -1190,6 +1388,61 @@ func (c *Checker) inferCallExpr(e *ast.CallExpr) *types.Type {
                                 withExpectedGot(fmt.Sprintf("%d", expectedArgs), fmt.Sprintf("%d", gotArgs)))
                 }
 
+                // For generic functions, infer type arguments and substitute through return type
+                if len(calleeType.TypeParams) > 0 {
+                        argTypes := make([]*types.Type, len(e.Args))
+                        for i, arg := range e.Args {
+                                argTypes[i] = c.inferExpr(arg.Value)
+                        }
+                        bindings := make(map[string]*types.Type)
+                        for i, pt := range calleeType.ParamTypes {
+                                if i < len(argTypes) {
+                                        collectTypeBindings(pt, argTypes[i], bindings)
+                                }
+                        }
+                        // Check where constraints: concrete type bound to each TypeParam must satisfy its trait
+                        if ident, ok := e.Callee.(*ast.Identifier); ok {
+                                for _, con := range c.fnConstraints[ident.Name] {
+                                        concreteType := bindings[con.TypeParam]
+                                        if concreteType == nil {
+                                                continue
+                                        }
+                                        ifaceType, ok := c.typeReg.Lookup(con.TraitName)
+                                        if !ok {
+                                                continue // already reported in validateConstraintDeclarations
+                                        }
+                                        if concreteType.Kind == types.KindStruct && !c.structSatisfiesInterface(concreteType, ifaceType) {
+                                                c.addError(newError(ErrConstraintNotSatisfied, e.Span,
+                                                        fmt.Sprintf("type %s does not satisfy constraint %s: %s",
+                                                                concreteType, con.TypeParam, con.TraitName)))
+                                        }
+                                }
+                        }
+
+                        if calleeType.ReturnT != nil {
+                                return calleeType.ReturnT.SubstituteTypeParams(bindings)
+                        }
+                        return types.BuiltinNone
+                }
+
+                // Check interface-typed parameters: struct argument must satisfy the interface.
+                for i, paramType := range calleeType.ParamTypes {
+                        if paramType.Kind != types.KindInterface {
+                                continue
+                        }
+                        if i >= len(e.Args) {
+                                break
+                        }
+                        argType := c.inferExpr(e.Args[i].Value)
+                        if argType != nil && argType.Kind == types.KindStruct {
+                                if !c.structSatisfiesInterface(argType, paramType) {
+                                        c.addError(newError(ErrTypeMismatch, e.Args[i].Value.GetSpan(),
+                                                fmt.Sprintf("struct %s does not implement interface %s",
+                                                        argType, paramType)))
+                                }
+                        }
+                }
+
                 return calleeType.ReturnT
         }
 
@@ -1432,6 +1685,63 @@ func (c *Checker) inferMapExpr(e *ast.MapExpr) *types.Type {
         return types.NewMapType(keyType, valType)
 }
 
+// inferExprWithHint infers the type of expr using hint as a contextual expected type.
+// Handles empty collections and Option/Result constructors; falls through to inferExpr otherwise.
+func (c *Checker) inferExprWithHint(expr ast.Expr, hint *types.Type) *types.Type {
+        if hint == nil {
+                return c.inferExpr(expr)
+        }
+        switch e := expr.(type) {
+        case *ast.ListExpr:
+                if len(e.Elements) == 0 && hint.Kind == types.KindList {
+                        return types.NewListType(hint.ElementT)
+                }
+        case *ast.MapExpr:
+                if len(e.Entries) == 0 && hint.Kind == types.KindMap {
+                        return types.NewMapType(hint.KeyT, hint.ValueT)
+                }
+        case *ast.CallExpr:
+                if ident, ok := e.Callee.(*ast.Identifier); ok {
+                        switch ident.Name {
+                        case "Some":
+                                if hint.Kind == types.KindOption && len(e.Args) == 1 {
+                                        argType := c.inferExpr(e.Args[0].Value)
+                                        if argType != nil && !types.IsAssignableTo(argType, hint.ElementT) {
+                                                c.addError(newError(ErrTypeMismatch, e.Args[0].Value.GetSpan(),
+                                                        fmt.Sprintf("Some: argument type %s does not match Option[%s]",
+                                                                argType, hint.ElementT)).
+                                                        withExpectedGot(hint.ElementT.String(), argType.String()))
+                                        }
+                                        return types.NewOptionType(hint.ElementT)
+                                }
+                        case "Ok":
+                                if hint.Kind == types.KindResult && len(e.Args) == 1 {
+                                        argType := c.inferExpr(e.Args[0].Value)
+                                        if argType != nil && !types.IsAssignableTo(argType, hint.ElementT) {
+                                                c.addError(newError(ErrTypeMismatch, e.Args[0].Value.GetSpan(),
+                                                        fmt.Sprintf("Ok: argument type %s does not match Result[%s, _]",
+                                                                argType, hint.ElementT)).
+                                                        withExpectedGot(hint.ElementT.String(), argType.String()))
+                                        }
+                                        return hint
+                                }
+                        case "Err":
+                                if hint.Kind == types.KindResult && len(e.Args) == 1 {
+                                        argType := c.inferExpr(e.Args[0].Value)
+                                        if argType != nil && !types.IsAssignableTo(argType, hint.ValueT) {
+                                                c.addError(newError(ErrTypeMismatch, e.Args[0].Value.GetSpan(),
+                                                        fmt.Sprintf("Err: argument type %s does not match Result[_, %s]",
+                                                                argType, hint.ValueT)).
+                                                        withExpectedGot(hint.ValueT.String(), argType.String()))
+                                        }
+                                        return hint
+                                }
+                        }
+                }
+        }
+        return c.inferExpr(expr)
+}
+
 func (c *Checker) inferStructExpr(e *ast.StructExpr) *types.Type {
         t, ok := c.typeReg.Lookup(e.TypeName)
         if !ok {
@@ -1588,6 +1898,13 @@ func (c *Checker) resolveTypeExpr(te ast.TypeExpr) *types.Type {
 }
 
 func (c *Checker) resolveNamedType(t *ast.NamedType) *types.Type {
+        // Check active type parameter bindings first (e.g. T in fn identity[T])
+        if c.typeParamBindings != nil {
+                if bound, ok := c.typeParamBindings[t.Name]; ok {
+                        return bound
+                }
+        }
+
         // Check builtins and registered types
         if resolved, ok := c.typeReg.Lookup(t.Name); ok {
                 if len(t.Args) > 0 && len(resolved.TypeParams) > 0 {
@@ -1596,10 +1913,19 @@ func (c *Checker) resolveNamedType(t *ast.NamedType) *types.Type {
                         for i, a := range t.Args {
                                 args[i] = c.resolveTypeExpr(a)
                         }
-                        // Create instantiated copy
-                        inst := *resolved
-                        inst.TypeArgs = args
-                        return &inst
+                        if len(args) != len(resolved.TypeParams) {
+                                c.addError(newError(ErrTypeParamCount, t.Span,
+                                        fmt.Sprintf("type %q expects %d type argument(s), got %d",
+                                                t.Name, len(resolved.TypeParams), len(args))))
+                                return resolved
+                        }
+                        bindings := make(map[string]*types.Type, len(resolved.TypeParams))
+                        for i, name := range resolved.TypeParams {
+                                bindings[name] = args[i]
+                        }
+                        instantiated := resolved.SubstituteTypeParams(bindings)
+                        instantiated.TypeArgs = args
+                        return instantiated
                 }
                 return resolved
         }
@@ -1621,6 +1947,49 @@ func (c *Checker) resolveNamedType(t *ast.NamedType) *types.Type {
         c.addError(newError(ErrUndefinedType, t.Span,
                 fmt.Sprintf("undefined type %q", t.Name)))
         return types.BuiltinAny
+}
+
+// collectTypeBindings walks param and arg types together, recording type parameter
+// substitutions into bindings. Used for generic call-site type argument inference.
+func collectTypeBindings(param, arg *types.Type, bindings map[string]*types.Type) {
+        if param == nil || arg == nil {
+                return
+        }
+        switch param.Kind {
+        case types.KindTypeParam:
+                if _, exists := bindings[param.Name]; !exists {
+                        bindings[param.Name] = arg
+                }
+        case types.KindList, types.KindSet, types.KindOption:
+                if arg.Kind == param.Kind {
+                        collectTypeBindings(param.ElementT, arg.ElementT, bindings)
+                }
+        case types.KindMap:
+                if arg.Kind == types.KindMap {
+                        collectTypeBindings(param.KeyT, arg.KeyT, bindings)
+                        collectTypeBindings(param.ValueT, arg.ValueT, bindings)
+                }
+        case types.KindResult:
+                if arg.Kind == types.KindResult {
+                        collectTypeBindings(param.ElementT, arg.ElementT, bindings)
+                        collectTypeBindings(param.ValueT, arg.ValueT, bindings)
+                }
+        case types.KindTuple, types.KindUnion, types.KindIntersection:
+                if arg.Kind == param.Kind && len(param.Members) == len(arg.Members) {
+                        for i := range param.Members {
+                                collectTypeBindings(param.Members[i], arg.Members[i], bindings)
+                        }
+                }
+        case types.KindFunction:
+                if arg.Kind == types.KindFunction {
+                        for i := range param.ParamTypes {
+                                if i < len(arg.ParamTypes) {
+                                        collectTypeBindings(param.ParamTypes[i], arg.ParamTypes[i], bindings)
+                                }
+                        }
+                        collectTypeBindings(param.ReturnT, arg.ReturnT, bindings)
+                }
+        }
 }
 
 // --- Helpers ---

@@ -20,17 +20,20 @@ type Environment struct {
 	typeExprs map[string]ast.TypeExpr
 	// effects tracks available effect capabilities
 	effects map[string]bool
+	// implMethods stores impl block methods: typeName -> methodName -> FunctionVal
+	implMethods map[string]map[string]*FunctionVal
 }
 
 // NewEnvironment creates a new top-level environment.
 func NewEnvironment() *Environment {
 	return &Environment{
-		values:     make(map[string]Value),
-		consts:     make(map[string]bool),
-		structDefs: make(map[string][]string),
-		enumDefs:   make(map[string]map[string]int),
-		typeExprs:  make(map[string]ast.TypeExpr),
-		effects:    make(map[string]bool),
+		values:      make(map[string]Value),
+		consts:      make(map[string]bool),
+		structDefs:  make(map[string][]string),
+		enumDefs:    make(map[string]map[string]int),
+		typeExprs:   make(map[string]ast.TypeExpr),
+		effects:     make(map[string]bool),
+		implMethods: make(map[string]map[string]*FunctionVal),
 	}
 }
 
@@ -141,6 +144,34 @@ func (e *Environment) GetTypeExpr(name string) (ast.TypeExpr, bool) {
 	}
 	if e.parent != nil {
 		return e.parent.GetTypeExpr(name)
+	}
+	return nil, false
+}
+
+// root returns the top-level environment.
+func (e *Environment) root() *Environment {
+	cur := e
+	for cur.parent != nil {
+		cur = cur.parent
+	}
+	return cur
+}
+
+// DefineImplMethod registers an impl method at the root environment.
+func (e *Environment) DefineImplMethod(typeName, methodName string, fn *FunctionVal) {
+	r := e.root()
+	if r.implMethods[typeName] == nil {
+		r.implMethods[typeName] = make(map[string]*FunctionVal)
+	}
+	r.implMethods[typeName][methodName] = fn
+}
+
+// GetImplMethod looks up an impl method from the root environment.
+func (e *Environment) GetImplMethod(typeName, methodName string) (*FunctionVal, bool) {
+	r := e.root()
+	if methods, ok := r.implMethods[typeName]; ok {
+		fn, ok := methods[methodName]
+		return fn, ok
 	}
 	return nil, false
 }
