@@ -113,11 +113,14 @@ All five sub-items of Phase 5 (5.1–5.5) are now done. The language is feature-
 - **`aura build [--output <file>] <file.aura>`** — emits Go, invokes `go build`, produces native binary
 - **`aura deps`** — verifies all `aura.pkg` dependencies resolve (formerly `aura build` pkgmgr check)
 
-### Next: Phase 6.2 — Compiler Improvements
+### Next: Phase 6.2 — Bytecode Compiler
 
-Potential next steps to improve the Go-source compiler:
-- Support `import` statements (emit Go `import` declarations)
-- Support method definitions on structs (`impl` blocks)
-- More complete stdlib mapping (e.g. `append`, `len` on typed collections)
-- Error propagation with `?` operator
-- Pattern matching (`match`) in emitted Go (currently skipped)
+The primary compilation path going forward is **bytecode → VM** (for development) and **bytecode → LLVM** (for production). The Go-source compiler (6.1) is a working bridge that provides `aura build` today; 6.2–6.4 are the real compiler stack.
+
+**Phase 6.2 scope** (`pkg/compiler`):
+- Stack-based bytecode instruction set design
+- Compiler from typed AST to bytecode IR
+- Constant pool, symbol table, function/closure compilation
+- Bytecode serialization (`.aurac` files) and disassembler
+
+**Key design decision:** Settle instruction set before writing any VM or LLVM code — both 6.3 and 6.4 consume the same IR. See ROADMAP.md §6.2 for full checklist.

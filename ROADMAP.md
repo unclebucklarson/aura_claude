@@ -36,7 +36,7 @@ These principles guide every phase of development. When evaluating features, tra
 | 3.3 | Advanced Type Features | ✅ COMPLETE (all 4 chunks) | v1.0.0 | — |
 | 4 | Runtime & Standard Library | ✅ COMPLETE (4.1 ✅, 4.2 ✅, 4.3 ✅) | v0.8.0 | — |
 | 5 | Advanced Tooling & Ecosystem | ✅ COMPLETE | v1.3.0 | — |
-| 6 | Compiler & Native Compilation | 🔲 Not Started | v2.0.0 | 9–12 weeks |
+| 6 | Compiler & Native Compilation | 🔄 In Progress | v2.0.0 | 9–12 weeks |
 
 ---
 
@@ -453,7 +453,7 @@ Phase 4 delivers a complete runtime and standard library for Aura:
 
 ---
 
-## Phase 6: Compiler & Native Compilation — 🔲 NOT STARTED
+## Phase 6: Compiler & Native Compilation — 🔄 IN PROGRESS
 
 **Goal:** Compile Aura programs to **native executables** via LLVM, with a bytecode VM for fast development iteration. This is the culmination of Aura's vision — a language with Python's expressiveness that compiles to standalone, zero-dependency binaries.
 
@@ -506,7 +506,27 @@ This is the end state: **write Aura, ship native binaries.** No runtime. No depe
 
 ---
 
-### 6.1 Bytecode Compiler (2 weeks)
+### 6.1 Go-source Compiler — ✅ COMPLETE
+
+**Complexity:** Medium | **Package:** `pkg/goemit`
+
+Emit valid Go source from the Aura AST, then invoke the Go toolchain to produce a native binary. This gives a working `aura build` command immediately — Aura programs run as compiled Go binaries — with no LLVM toolchain dependency.
+
+- [x] `pkg/goemit/emitter.go` — Aura AST → Go source
+- [x] Runtime preamble with generic `auraOption[T]` / `auraResult[T,E]` structs
+- [x] Type mapping: Int→int64, Float→float64, [T]→[]T, {K:V}→map[K]V
+- [x] Unit enums → `type Name int` + iota consts; tagged enums → interface + per-variant structs
+- [x] String interpolation → `fmt.Sprintf`; pipeline `|>` → function call inversion
+- [x] Package detection: module with `main()` → `package main`, library → module name
+- [x] `aura build [--output <file>] <file.aura>` — emits Go source, invokes `go build`, produces native binary
+- [x] `aura deps` — verifies all `aura.pkg` dependencies resolve
+- [x] 14 tests in `pkg/goemit`, all passing; emitted Go is gofmt-clean
+
+**Outcome:** `aura build main.aura` produces a native binary via Go compilation. Fast to implement, no new toolchain dependencies, and provides the `aura build` UX immediately. The bytecode + LLVM path (6.2–6.5) will eventually replace this as the primary native backend.
+
+---
+
+### 6.2 Bytecode Compiler (2 weeks)
 
 **Complexity:** High
 
@@ -526,7 +546,7 @@ Design and implement a stack-based intermediate representation (IR) and bytecode
 
 **Expected outcome:** Aura programs compile to a portable bytecode format that serves as the shared IR for both the VM and native backends.
 
-### 6.2 Virtual Machine — Development Mode (2 weeks)
+### 6.3 Virtual Machine — Development Mode (2 weeks)
 
 **Complexity:** High
 
@@ -547,7 +567,7 @@ Build a stack-based virtual machine for **fast development iteration**. This is 
 
 **Expected outcome:** `aura run` executes 10–50x faster than the tree-walk interpreter while maintaining identical semantics. Development mode provides instant startup and rich debugging — the go-to mode during coding.
 
-### 6.3 LLVM Native Backend — Production Mode (3–4 weeks) ⭐
+### 6.4 LLVM Native Backend — Production Mode (3–4 weeks) ⭐
 
 **Complexity:** Very High | **This is the key differentiator.**
 
@@ -579,7 +599,7 @@ Compile Aura bytecode IR to native machine code via LLVM. This is what makes Aur
 - **Dependencies:** Zero (single binary, no runtime required)
 - **Platforms:** x86_64 and ARM64 on Linux, macOS, and Windows
 
-### 6.4 Optimizations (2 weeks)
+### 6.5 Optimizations (2 weeks)
 
 **Complexity:** Medium-High
 
@@ -596,7 +616,7 @@ Optimization passes that apply to both VM and native compilation paths.
 - [ ] **Garbage collection** — Mark-and-sweep GC for VM mode; reference counting or ownership for native mode
 - [ ] **Inline caching** — Fast method dispatch for polymorphic calls (VM mode)
 
-**Package:** `pkg/compiler`, `pkg/vm`, `pkg/codegen/llvm`
+**Package:** `pkg/compiler`, `pkg/vm`, `pkg/codegen/llvm`, `pkg/goemit`
 
 **Expected outcome:** Optimized Aura programs achieve predictable, high performance with minimal memory overhead. LTO and PGO enable production builds to approach hand-optimized performance.
 
@@ -613,23 +633,23 @@ Optimization passes that apply to both VM and native compilation paths.
                     ┌────────▼────────┐
                     │  Parser + AST   │
                     │  Type Checker   │
-                    └────────┬────────┘
-                             │
-                    ┌────────▼────────┐
-                    │    Bytecode     │
-                    │   Compiler      │
-                    │  (shared IR)    │
-                    └───┬─────────┬───┘
-                        │         │
-           ┌────────────▼──┐  ┌──▼────────────┐
-           │  VM Executor  │  │  LLVM Backend  │
-           │  (aura run)   │  │  (aura build)  │
-           │               │  │                │
-           │  • Fast start │  │  • Native bin  │
-           │  • Debugging  │  │  • Zero deps   │
-           │  • Hot reload │  │  • Max speed   │
-           │  • Dev mode   │  │  • Prod mode   │
-           └───────────────┘  └────────────────┘
+                    └──┬──────────┬───┘
+                       │          │
+          ┌────────────▼──┐  ┌───▼─────────────┐
+          │  Go Emitter   │  │    Bytecode      │
+          │  (pkg/goemit) │  │   Compiler       │
+          │  [Phase 6.1✅] │  │  (shared IR)    │
+          │               │  └───┬──────────┬───┘
+          │  • Works now  │      │          │
+          │  • Via go build│  ┌──▼──────┐ ┌─▼────────────┐
+          └───────┬───────┘  │   VM    │ │ LLVM Backend │
+                  │          │Executor │ │(aura build   │
+                  │          │(aura run│ │  --release)  │
+                  │          │         │ │              │
+          ┌───────▼──────┐  │• Dev    │ │• Native bin  │
+          │ Native binary │  │• Debug  │ │• Zero deps   │
+          │ (via Go tools)│  │• Fast   │ │• Max speed   │
+          └───────────────┘  └─────────┘ └──────────────┘
 ```
 
 ### Phase 6 Milestone Criteria
