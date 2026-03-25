@@ -311,6 +311,65 @@ func valueRepr(v Value) string {
         return v.String()
 }
 
+// Repr returns a display-friendly string for a value (strings are quoted).
+func Repr(v Value) string { return valueRepr(v) }
+
+// TypeName returns a human-readable type name for a runtime value.
+// For generic containers it includes the element type where possible.
+func TypeName(v Value) string {
+        if v == nil {
+                return "None"
+        }
+        switch val := v.(type) {
+        case *StructVal:
+                return val.TypeName
+        case *EnumVal:
+                return val.TypeName
+        case *OptionVal:
+                if !val.IsSome {
+                        return "None"
+                }
+                return "Option[" + TypeName(val.Val) + "]"
+        case *ResultVal:
+                if val.IsOk {
+                        return "Result[" + TypeName(val.Val) + ", _]"
+                }
+                return "Result[_, " + TypeName(val.Val) + "]"
+        case *ListVal:
+                if len(val.Elements) == 0 {
+                        return "[Any]"
+                }
+                return "[" + TypeName(val.Elements[0]) + "]"
+        case *MapVal:
+                if len(val.Keys) == 0 {
+                        return "{Any: Any}"
+                }
+                return "{" + TypeName(val.Keys[0]) + ": " + TypeName(val.Values[0]) + "}"
+        case *SetVal:
+                if len(val.Elements) == 0 {
+                        return "{Any}"
+                }
+                return "{" + TypeName(val.Elements[0]) + "}"
+        case *TupleVal:
+                parts := make([]string, len(val.Elements))
+                for i, e := range val.Elements {
+                        parts[i] = TypeName(e)
+                }
+                return "(" + strings.Join(parts, ", ") + ")"
+        case *FunctionVal:
+                if val.Name != "" {
+                        return "fn " + val.Name
+                }
+                return "fn"
+        case *LambdaVal:
+                return "fn"
+        case *BuiltinFnVal:
+                return "fn " + val.Name
+        default:
+                return valueTypeNames[v.Type()]
+        }
+}
+
 // IsTruthy returns whether a value is considered truthy.
 func IsTruthy(v Value) bool {
         if v == nil {

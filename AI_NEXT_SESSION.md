@@ -10,7 +10,7 @@
 |--|--|
 | **Version** | v1.0.0 |
 | **Tests** | 1133 (all passing) |
-| **Phases complete** | 1, 2, 3.1, 3.1.1, 3.2 (all chunks), 3.3 (all chunks ✅), 4, Issue #8, Issue #11, Phase 5.4 ✅ |
+| **Phases complete** | 1, 2, 3.1, 3.1.1, 3.2 (all chunks), 3.3 (all chunks ✅), 4, Issue #8, Issue #11, Phase 5.4 ✅, Phase 5.5 ✅ |
 
 | Package | Tests |
 |---------|-------|
@@ -48,7 +48,7 @@ All language features are stable (Phases 1–4, 3.3 complete). Phase 5 builds th
 | Section | Item | Complexity | Estimate |
 |---------|------|-----------|----------|
 | 5.4 | **Documentation Generator** (`aura doc`) | Low-Medium | ✅ Done |
-| 5.5 | **REPL** (enhance existing stub) | Medium | 2 weeks |
+| 5.5 | **REPL** (enhance existing stub) | Medium | ✅ Done |
 | 5.3 | **AI Integration** (spec-to-impl pipeline) | Medium | 2–3 weeks |
 | 5.2 | **Package Manager** | Medium | 3–4 weeks |
 | 5.1 | **LSP** (`cmd/aura-lsp`) | High | 4–6 weeks |

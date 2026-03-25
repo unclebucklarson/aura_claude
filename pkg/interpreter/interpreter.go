@@ -458,6 +458,63 @@ func (interp *Interpreter) Run() (result Value, err error) {
         return result, nil
 }
 
+// RegisterItem registers a single top-level item into the interpreter's
+// environment. Used by the REPL to incrementally add definitions.
+func (interp *Interpreter) RegisterItem(item ast.TopLevelItem) (err error) {
+        defer func() {
+                if r := recover(); r != nil {
+                        switch e := r.(type) {
+                        case *RuntimeError:
+                                err = e
+                        default:
+                                err = fmt.Errorf("runtime panic: %v", r)
+                        }
+                }
+        }()
+        switch it := item.(type) {
+        case *ast.StructDef:
+                fields := make([]string, len(it.Fields))
+                for i, f := range it.Fields {
+                        fields[i] = f.Name
+                }
+                interp.env.DefineStruct(it.Name, fields)
+        case *ast.EnumDef:
+                variants := make(map[string]int, len(it.Variants))
+                for _, v := range it.Variants {
+                        variants[v.Name] = len(v.Fields)
+                }
+                interp.env.DefineEnum(it.Name, variants)
+        case *ast.FnDef:
+                fn := &FunctionVal{
+                        Name:   it.Name,
+                        Params: it.Params,
+                        Body:   it.Body,
+                        Env:    interp.env,
+                }
+                interp.env.DefineConst(it.Name, fn)
+        case *ast.ConstDef:
+                val := EvalExpr(it.Value, interp.env)
+                interp.env.DefineConst(it.Name, val)
+        case *ast.TypeDef:
+                interp.env.DefineTypeExpr(it.Name, it.Body)
+        case *ast.ImplBlock:
+                targetName := ""
+                if nt, ok := it.TargetType.(*ast.NamedType); ok {
+                        targetName = nt.Name
+                }
+                for _, method := range it.Methods {
+                        fn := &FunctionVal{
+                                Name:   method.Name,
+                                Params: method.Params,
+                                Body:   method.Body,
+                                Env:    interp.env,
+                        }
+                        interp.env.DefineImplMethod(targetName, method.Name, fn)
+                }
+        }
+        return nil
+}
+
 // RunFunction calls a named function with the given arguments.
 func (interp *Interpreter) RunFunction(name string, args []Value) (result Value, err error) {
         defer func() {

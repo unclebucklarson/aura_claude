@@ -427,14 +427,16 @@ Phase 4 delivers a complete runtime and standard library for Aura:
 - [x] `aura doc [--json] <file>` CLI command
 - [x] `pkg/docgen` package — 12 tests
 
-### 5.5 REPL
+### 5.5 REPL ✅ COMPLETE (v1.1.0-alpha.2)
 
-**Complexity:** Medium | **Estimate:** 2 weeks
-
-- [ ] Interactive Aura evaluation loop
-- [ ] Expression evaluation and pretty-printing
-- [ ] History, auto-completion, and multi-line input
-- [ ] `:type` and `:effects` introspection commands
+- [x] Multi-line input — lines ending with `:` trigger `....` continuation prompt; blank line submits
+- [x] Top-level definitions (`fn`, `struct`, `enum`, `type`, `trait`, `impl`) registered incrementally via `RegisterItem`
+- [x] Persistent `let` bindings across lines (executed directly in session env)
+- [x] Expression results printed with value and inferred runtime type: `42  : Int`
+- [x] `:type <expr>` introspection command
+- [x] `:reset` clears session; `:help` lists commands
+- [x] `TypeName(Value) string` and `Repr(Value) string` public helpers in `pkg/interpreter`
+- [x] `RegisterItem(TopLevelItem) error` on `Interpreter` for incremental registration
 
 ---
 
@@ -661,3 +663,4 @@ See [DEVELOPMENT.md](DEVELOPMENT.md) for setup instructions, architecture overvi
 | 2026-03-24 | v1.0.0 | **Phase 3.3 Chunk 4** — Improved type inference: `inferExprWithHint`, empty collection inference, `Some/Ok/Err` bidirectional checking, generic type aliases documented, 24 new tests (1120 total) |
 | 2026-03-24 | v1.0.0 | **Issue #11** — String concat O(n²) fixed: `collectConcatLeaves` + `evalConcatChain` in eval.go, 1 new test (1121 total). No open debt remaining. |
 | 2026-03-24 | v1.1.0-alpha.1 | **Phase 5.4** — Documentation Generator: `pkg/docgen`, `aura doc [--json]`, parser doc-comment attachment (`collectDocComments`, `skipNewlinesKeepDoc`), 12 new tests (1133 total) |
+| 2026-03-24 | v1.1.0-alpha.2 | **Phase 5.5** — Enhanced REPL: multi-line input, top-level definition registration, `:type`/`:reset`/`:help`, value+type display, `TypeName`/`Repr`/`RegisterItem` interpreter helpers (no new tests — interactive I/O) |
