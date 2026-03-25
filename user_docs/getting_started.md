@@ -143,8 +143,17 @@ pub fn save_record(data: String) -> Result[Bool, Error] with db, log:
 | Command | Description |
 |---------|-------------|
 | `aura format <file>` | Format an Aura file and print to stdout |
-| `aura format -w <file>` | Format an Aura file in-place |
 | `aura parse <file>` | Parse a file and dump tokens + AST |
+| `aura check [--json] <file>` | Type-check; `--json` for AI-parseable errors |
+| `aura run <file> [args...]` | Execute a program; extra args available via `env.args()` |
+| `aura test <file>` | Run `test` blocks in a file |
+| `aura build [--output <bin>] <file>` | Compile to a native binary (via Go codegen) |
+| `aura repl` | Interactive REPL |
+| `aura doc [--json] <file>` | Generate documentation from doc comments |
+| `aura generate [--dry-run] [--json] <file>` | AI-generate implementations for unimplemented specs |
+| `aura init [name]` | Create an `aura.pkg` manifest in the current directory |
+| `aura add <alias> <path>` | Add a local package dependency |
+| `aura deps` | Verify all `aura.pkg` dependencies resolve correctly |
 
 ---
 

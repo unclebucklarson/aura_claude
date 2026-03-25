@@ -437,15 +437,17 @@ test "description":
 
 ### Core Capabilities
 
-| Capability | Description | Example Operations |
-|------------|-------------|--------------------|
-| `db` | Database access | query, insert, update, delete |
-| `net` | Network I/O | HTTP requests, sockets |
-| `fs` | File system access | read, write, list |
-| `time` | Clock access | current time, sleep |
-| `random` | Non-determinism | random numbers, UUIDs |
-| `auth` | Authentication | check permissions, get user |
-| `log` | Logging | log messages, metrics |
+| Capability | Stdlib module | Description |
+|------------|---------------|-------------|
+| `io` | `std.io` | Console input/output — print, read_line, input |
+| `file` | `std.file` | File system access — read, write, list, delete |
+| `net` | `std.net` | Network I/O — HTTP requests |
+| `time` | `std.time` | Clock access — current time, sleep |
+| `env` | `std.env` | Environment variables, CLI args, process exit |
+| `log` | `std.log` | Structured logging |
+| `random` | `std.random` | Non-deterministic values — random numbers |
+| `db` | *(future)* | Database access — query, insert, update, delete |
+| `auth` | *(future)* | Authentication — check permissions, get user |
 
 ### Rules
 

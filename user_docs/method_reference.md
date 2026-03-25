@@ -1,10 +1,10 @@
 # Aura Method Reference
 
-> **Version:** 0.8.1 (Phase 3.1.1 — Tuple Literal Syntax COMPLETE)
-> **Total Methods:** 120+ built-in methods + 117 stdlib functions  
-> **Types Covered:** String (22) · List (27) · Map (24) · Tuple (12) · Option (17) · Result (18)  
-> **Stdlib Modules:** math · string · io · testing · json · regex · collections · random · format · result · option · iter · file · time · env · net · log  
-> **Tests:** 905 total across all packages
+> **Version:** 2.0.1
+> **Built-in Methods:** String (19) · List (26) · Map (22) · Tuple (12) · Option (17) · Result (18)
+> **Stdlib Modules:** math · string · io · testing · json · regex · collections · random · format · result · option · iter · file · time · env · net · log
+> **Stdlib Functions:** 120 across 17 modules
+> **Tests:** 1193 total across all packages
 
 ---
 
@@ -75,13 +75,6 @@ Returns the number of Unicode code points (runes) in the string.
 "".len()            // => 0
 ```
 
-#### `length() -> Int`
-Alias for `len()`.
-
-```aura
-"hello".length()    // => 5
-```
-
 #### `is_empty() -> Bool`
 Returns `true` if the string has zero length.
 
@@ -101,18 +94,12 @@ Returns a new string with all characters converted to uppercase.
 "hello".upper()     // => "HELLO"
 ```
 
-#### `to_upper() -> String`
-Alias for `upper()`.
-
 #### `lower() -> String`
 Returns a new string with all characters converted to lowercase.
 
 ```aura
 "HELLO".lower()     // => "hello"
 ```
-
-#### `to_lower() -> String`
-Alias for `lower()`.
 
 ---
 
@@ -285,9 +272,6 @@ Returns the number of elements.
 ```aura
 [1, 2, 3].len()              // => 3
 ```
-
-#### `length() -> Int`
-Alias for `len()`.
 
 #### `is_empty() -> Bool`
 Returns `true` if the list has zero elements.
@@ -564,12 +548,6 @@ Returns the number of key-value pairs.
 {"a": 1, "b": 2}.len()        // => 2
 ```
 
-#### `length() -> Int`
-Alias for `len()`.
-
-#### `size() -> Int`
-Alias for `len()`.
-
 #### `is_empty() -> Bool`
 Returns `true` if the map has no entries.
 
@@ -794,7 +772,6 @@ let nested = ((1, 2), (3, 4))
 | Method | Returns | Description |
 |--------|---------|-------------|
 | `len()` | `Int` | Number of elements |
-| `length()` | `Int` | Alias for `len()` |
 | `is_empty()` | `Bool` | True if tuple has no elements |
 
 ```aura
@@ -1380,7 +1357,7 @@ let record = keys.zip(vals).reduce({}, |acc, pair| {
 
 ---
 
-> *This reference was generated for Aura v0.4.0. For language syntax, see the main [README](../README.md). For the development roadmap, see [ROADMAP.md](../ROADMAP.md).*
+> *Aura v2.0.1. For language syntax, see the [Language Reference](language_reference.md). For the development roadmap, see [ROADMAP.md](../ROADMAP.md).*
 
 
 
@@ -1580,6 +1557,30 @@ iter.pairwise([1, 2, 3, 4])     // [[1,2], [2,3], [3,4]]
 
 ---
 
+## std.io — Console I/O
+
+The `std.io` module provides terminal input and output. Output functions write directly to stdout. Input functions read from stdin and should be declared with `with io`.
+
+```aura
+import std.io as io
+
+io.println("Hello, World!")
+io.print("no newline")
+
+let line = io.read_line()    # Option[String] — None on EOF
+let name = io.input("Name: ")  # prints prompt, reads line
+```
+
+| Function | Args | Returns | Description |
+|----------|------|---------|-------------|
+| `print` | `(...values)` | `None` | Print values separated by spaces, with newline |
+| `println` | `(...values)` | `None` | Alias for `print` |
+| `format` | `(template: String, ...values)` | `String` | Replace `{}` placeholders with values |
+| `read_line` | `()` | `Option[String]` | Read one line from stdin; `None` on EOF |
+| `input` | `(prompt?: String)` | `String` | Print optional prompt, read line; empty string on EOF |
+
+---
+
 ## std.file — File System Operations (Effect-Based)
 
 > **Effect:** `file` — This module uses the file effect provider, which can be mocked for testing.
@@ -1696,13 +1697,17 @@ import std.env
 ```aura
 import std.env
 
-let home = env.get("HOME")      // Option[String]
+let home = env.get("HOME")       # Option[String]
 env.set("APP_MODE", "production")
-let exists = env.has("PATH")    // Bool
+let exists = env.has("PATH")     # Bool
 
-let vars = env.list()           // Map[String, String]
-let cwd = env.cwd()             // String
-let args = env.args()           // List[String]
+let vars = env.list()            # Map[String, String]
+let cwd = env.cwd()              # String
+
+# Args passed after the filename in `aura run main.aura arg1 arg2`
+let args = env.args()            # ["arg1", "arg2"]
+
+env.exit(0)                      # terminate with exit code
 ```
 
 #### Functions
@@ -1714,7 +1719,8 @@ let args = env.args()           // List[String]
 | `has` | `(key: String)` | `Bool` | Check if variable exists |
 | `list` | `()` | `Map[String, String]` | List all environment variables |
 | `cwd` | `()` | `String` | Current working directory |
-| `args` | `()` | `List[String]` | Command-line arguments |
+| `args` | `()` | `List[String]` | User-supplied arguments (from `aura run file.aura arg1 arg2`) |
+| `exit` | `(code?: Int)` | `None` | Terminate process with exit code (default 0) |
 
 ---
 

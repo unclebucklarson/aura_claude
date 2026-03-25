@@ -36,13 +36,14 @@
 
 A complete toolchain for the **Aura programming language** — a Python-inspired, statically typed language with specification-driven development, algebraic types, and effect tracking.
 
-Built in Go. Implements lexing, parsing, AST construction, canonical source formatting, type checking with semantic analysis, tree-walk interpreter, 108+ core runtime methods across String, List, Map, Option, and Result types, 17 standard library modules with 117 functions, and a complete effect system with 5 mockable providers.
+Built in Go. Implements lexing, parsing, AST construction, canonical source formatting, type checking with semantic analysis, tree-walk interpreter, 96+ core runtime methods across String, List, Map, Option, and Result types, 17 standard library modules with 120 functions, a complete effect system with 5 mockable providers, LSP server, package manager, AI code generation, and a Go-source compiler.
 
 ## Project Structure
 
 ```
 aura-toolchain/
-├── cmd/aura/main.go              # CLI entry point (format, parse, check, run, test, repl)
+├── cmd/aura/main.go              # CLI entry point (format, parse, check, run, test, build, repl, doc, generate, init, add, deps)
+├── cmd/aura-lsp/main.go          # LSP server entry point
 ├── pkg/
 │   ├── token/token.go            # Token types, positions, spans
 │   ├── lexer/lexer.go            # Indentation-sensitive lexer (INDENT/DEDENT)
@@ -70,7 +71,7 @@ aura-toolchain/
 │       ├── effect.go             # Effect system: EffectContext, 5 providers (Real + Mock)
 │       ├── stdlib_math.go        # std.math (8 functions)
 │       ├── stdlib_string.go      # std.string (4 functions)
-│       ├── stdlib_io.go          # std.io (3 functions)
+│       ├── stdlib_io.go          # std.io (5 functions: print, println, format, read_line, input)
 │       ├── stdlib_testing.go     # std.testing (23 functions incl. effect-aware)
 │       ├── stdlib_json.go        # std.json (2 functions)
 │       ├── stdlib_regex.go       # std.regex (6 functions)
@@ -82,9 +83,23 @@ aura-toolchain/
 │       ├── stdlib_iter.go        # std.iter (5 functions)
 │       ├── stdlib_file.go        # std.file (9 functions, effect-based)
 │       ├── stdlib_time.go        # std.time (8 functions, effect-based)
-│       ├── stdlib_env.go         # std.env (6 functions, effect-based)
+│       ├── stdlib_env.go         # std.env (7 functions: get, set, has, list, cwd, args, exit)
 │       ├── stdlib_net.go         # std.net (5 functions, effect-based)
 │       └── stdlib_log.go         # std.log (6 functions, effect-based)
+├── pkg/goemit/                    # Go-source compiler (Aura AST → Go source)
+│   ├── emitter.go                # Emitter: type mapping, runtime preamble, all constructs
+│   └── emitter_test.go           # 14 tests
+├── pkg/lsp/                       # LSP server (JSON-RPC 2.0, LSP 3.17)
+│   ├── server.go                 # Dispatch loop, diagnostics, hover, definition
+│   ├── locate.go                 # Position-to-AST lookup
+│   ├── rpc.go                    # Content-Length framing
+│   └── types.go                  # LSP type surface
+├── pkg/pkgmgr/                    # Package manager
+│   └── manifest.go               # aura.pkg manifest: find, load, write, init, add-dep
+├── pkg/codegen/                   # AI code generation
+│   └── codegen.go                # ExtractContext, BuildPrompt, Generate, Validate
+├── pkg/docgen/                    # Documentation generator
+│   └── docgen.go                 # Markdown + JSON output from doc comments
 ├── testdata/                      # Sample .aura files
 ├── user_docs/                     # User-facing documentation
 │   ├── getting_started.md        # Installation and first program
@@ -157,6 +172,35 @@ go build -o aura ./cmd/aura
 ./aura repl
 ```
 
+**Compile** an Aura program to a native binary:
+
+```bash
+./aura build program.aura
+./aura build --output myapp program.aura
+```
+
+**Package management**:
+
+```bash
+./aura init myproject       # create aura.pkg manifest
+./aura add utils ./libs/utils  # add local dependency
+./aura deps                 # verify all dependencies resolve
+```
+
+**Generate** implementations for unimplemented specs (requires `ANTHROPIC_API_KEY`):
+
+```bash
+./aura generate --dry-run service.aura   # preview prompt
+./aura generate service.aura             # call API and generate
+```
+
+**Generate documentation**:
+
+```bash
+./aura doc service.aura
+./aura doc --json service.aura
+```
+
 ## Language Features Supported
 
 ### Types & Definitions
@@ -194,17 +238,18 @@ go build -o aura ./cmd/aura
 - String interpolation: `"Hello, {name}!"`
 - Struct construction with named fields
 
-### Built-in Methods (108+)
-- **String** (22): `len`, `upper`, `lower`, `contains`, `split`, `trim`, `replace`, `starts_with`, `ends_with`, `index_of`, `slice`, `chars`, `repeat`, `reverse`, and more
-- **List** (27): `map`, `filter`, `reduce`, `sort`, `reverse`, `first`, `last`, `get`, `flat_map`, `flatten`, `unique`, `zip`, `enumerate`, `any`, `all`, `sum`, `min`, `max`, and more
-- **Map** (24): `keys`, `values`, `entries`, `get`, `set`, `remove`, `merge`, `filter`, `map`, `find`, `has`, `contains_key`, `contains_value`, and more
+### Built-in Methods (96+)
+- **String** (19): `len`, `upper`, `lower`, `contains`, `split`, `trim`, `replace`, `starts_with`, `ends_with`, `index_of`, `slice`, `chars`, `repeat`, `reverse`, `join`, `pad_left`, `pad_right`, `is_empty`, `replace_first`
+- **List** (26): `map`, `filter`, `reduce`, `sort`, `reverse`, `first`, `last`, `get`, `flat_map`, `flatten`, `unique`, `zip`, `enumerate`, `any`, `all`, `sum`, `min`, `max`, `len`, `is_empty`, `append`, `push`, `pop`, `remove`, `index_of`, `count`
+- **Map** (22): `keys`, `values`, `entries`, `get`, `set`, `remove`, `merge`, `filter`, `map`, `find`, `has`, `len`, `is_empty`, `contains_key`, `contains_value`, and more
 - **Option** (17): `unwrap`, `expect`, `map`, `flat_map`, `and_then`, `filter`, `or_else`, `zip`, `to_result`, `is_some`, `is_none`, `contains`, and more
 - **Result** (18): `unwrap`, `expect`, `map`, `map_err`, `and_then`, `or_else`, `ok`, `err`, `to_option`, `is_ok`, `is_err`, `contains`, and more
 
-### Standard Library (17 modules, 117 functions)
-- **Pure Computation:** `std.math` (8), `std.string` (4), `std.io` (3), `std.json` (2), `std.regex` (6), `std.collections` (9), `std.random` (6), `std.format` (7), `std.result` (5), `std.option` (5), `std.iter` (5)
+### Standard Library (17 modules, 120 functions)
+- **Pure Computation:** `std.math` (8), `std.string` (4), `std.json` (2), `std.regex` (6), `std.collections` (9), `std.random` (6), `std.format` (7), `std.result` (5), `std.option` (5), `std.iter` (5)
+- **I/O:** `std.io` (5: print, println, format, read_line, input)
 - **Testing:** `std.testing` (23 functions including effect-aware assertions and mock setup)
-- **Effect-Based I/O:** `std.file` (9), `std.time` (8), `std.env` (6), `std.net` (5), `std.log` (6)
+- **Effect-Based I/O:** `std.file` (9), `std.time` (8), `std.env` (7: includes exit + corrected args), `std.net` (5), `std.log` (6)
 
 ### Effect System
 - **5 effect providers** with Real + Mock implementations: File, Time, Env, Net, Log
@@ -226,20 +271,20 @@ Run the full test suite:
 go test ./... -v
 ```
 
-**875 tests total** across all packages:
-- `pkg/lexer/` — 11 tests covering tokenization, indentation, comments, edge cases
-- `pkg/parser/` — 16 tests covering all language constructs
-- `pkg/formatter/` — 9 tests including round-trip verification (parse → format → parse = same AST)
-- `pkg/symbols/` — 9 tests covering symbol table, scopes, and lookups
-- `pkg/types/` — 26 tests covering type system, equality, subtyping, and registry
-- `pkg/checker/` — 49 tests covering type checking, effects, specs, and error diagnostics
-- `pkg/module/` — 17 tests covering module resolution, initialization ordering, cycle detection
-- `pkg/interpreter/` — 738 tests covering:
-  - Core interpreter (values, environment, expressions, statements, control flow, builtins, structs, enums, match, closures, test runner, string interpolation, pipeline operator, option chaining)
-  - 222 method-specific tests for String/List/Map/Option/Result
-  - 64 advanced import/module system tests
-  - 65 stdlib tests (regex, collections, random, format, result, option, iter)
-  - 222 effect system tests (file, time, env, net, log, composition, mocking)
+**1193 tests total** across all packages:
+- `pkg/lexer/` — 11 tests
+- `pkg/parser/` — 16 tests
+- `pkg/formatter/` — 9 tests (including round-trip verification)
+- `pkg/symbols/` — 9 tests
+- `pkg/types/` — 26 tests
+- `pkg/checker/` — 129 tests (type checking, effects, specs, refinement types)
+- `pkg/module/` — 17 tests
+- `pkg/interpreter/` — 904 tests (core, methods, stdlib, effect system)
+- `pkg/goemit/` — 14 tests (Go-source compiler)
+- `pkg/lsp/` — 20 tests (JSON-RPC, diagnostics, hover, definition)
+- `pkg/pkgmgr/` — 17 tests (manifest parse/write/resolve)
+- `pkg/codegen/` — 13 tests (AI generation pipeline)
+- `pkg/docgen/` — 12 tests
 
 ### Round-Trip Guarantee
 
@@ -306,9 +351,10 @@ The formatter preserves this exact canonical form. The parser produces a full AS
 
 ### User Documentation
 
-- **[Getting Started](user_docs/getting_started.md)** — Installation, first program, and basic usage
+- **[Getting Started](user_docs/getting_started.md)** — Installation, first program, and CLI command reference
 - **[Language Guide](user_docs/language_guide.md)** — Tutorial-style guide covering all language features with examples
 - **[Language Reference](user_docs/language_reference.md)** — Formal reference for types, syntax, effects, and specifications
+- **[Method Reference](user_docs/method_reference.md)** — Complete reference for all built-in methods and stdlib modules
 - **[Examples](user_docs/examples.md)** — Complete working examples covering every language feature
 
 ### AI-First Mission
