@@ -36,7 +36,7 @@ These principles guide every phase of development. When evaluating features, tra
 | 3.3 | Advanced Type Features | ✅ COMPLETE (all 4 chunks) | v1.0.0 | — |
 | 4 | Runtime & Standard Library | ✅ COMPLETE (4.1 ✅, 4.2 ✅, 4.3 ✅) | v0.8.0 | — |
 | 5 | Advanced Tooling & Ecosystem | ✅ COMPLETE | v1.3.0 | — |
-| 6 | Compiler & Native Compilation | 🔄 In Progress | v2.0.0 | 9–12 weeks |
+| 6 | Compiler & Native Compilation | 🔄 In Progress | v2.0.x | 9–12 weeks |
 
 ---
 
