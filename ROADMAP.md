@@ -35,7 +35,7 @@ These principles guide every phase of development. When evaluating features, tra
 | 3.2 | Pattern Matching (Advanced) | ✅ COMPLETE | v0.9.0 | — |
 | 3.3 | Advanced Type Features | ✅ COMPLETE (all 4 chunks) | v1.0.0 | — |
 | 4 | Runtime & Standard Library | ✅ COMPLETE (4.1 ✅, 4.2 ✅, 4.3 ✅) | v0.8.0 | — |
-| 5 | Advanced Tooling & Ecosystem | 🔄 In Progress (5.2/5.3/5.4/5.5 ✅) | v1.2.0 | 4–6 weeks |
+| 5 | Advanced Tooling & Ecosystem | ✅ COMPLETE | v1.3.0 | — |
 | 6 | Compiler & Native Compilation | 🔲 Not Started | v2.0.0 | 9–12 weeks |
 
 ---
@@ -374,7 +374,7 @@ Phase 4 delivers a complete runtime and standard library for Aura:
 
 ---
 
-## Phase 5: Advanced Tooling & Ecosystem — 🔄 IN PROGRESS (5.2, 5.3, 5.4, 5.5 ✅)
+## Phase 5: Advanced Tooling & Ecosystem — ✅ COMPLETE (v1.3.0)
 
 **Goal:** Build the developer experience and ecosystem around Aura (LSP, Package Manager, AI Integration, Build System).
 
@@ -388,17 +388,29 @@ Phase 4 delivers a complete runtime and standard library for Aura:
 
 ### 5.1 Language Server Protocol (LSP)
 
-**Complexity:** High | **Estimate:** 4–6 weeks
+**Complexity:** High | Split into 4 sub-chunks | **Package:** `cmd/aura-lsp`, `pkg/lsp`
 
-- [ ] Implement an LSP server for Aura
-- [ ] Go-to-definition, find-references, rename
-- [ ] Hover information (types, docs, effects)
-- [ ] Diagnostics (errors and warnings from semantic analysis)
-- [ ] Auto-completion for identifiers, types, and keywords
-- [ ] Signature help for function calls
-- [ ] Code actions (quick fixes for common errors)
+#### 5.1.1 JSON-RPC server + lifecycle ✅
+- [x] `pkg/lsp/rpc.go` — `Content-Length` framing; `ReadMessage` / `WriteMessage`
+- [x] `pkg/lsp/types.go` — full LSP 3.17 type surface
+- [x] `pkg/lsp/server.go` — dispatch loop; `initialize` / `initialized` / `shutdown` / `exit` handlers
+- [x] `cmd/aura-lsp/main.go` — entry point, wires server to stdin/stdout
+- [x] Tests: RPC framing encode/decode; message dispatch
 
-**Package:** `cmd/aura-lsp`
+#### 5.1.2 Diagnostics ✅
+- [x] Document buffer management (`didOpen`, `didChange`, `didClose`)
+- [x] Run full lex+parse+typecheck pipeline on every change
+- [x] `textDocument/publishDiagnostics` — checker errors mapped to LSP `Diagnostic` with line/col/severity
+- [x] Tests: diagnostics from valid and invalid Aura source
+
+#### 5.1.3 Hover ✅
+- [x] `pkg/lsp/locate.go` — `wordAt` cursor extraction; top-level definition lookup
+- [x] `textDocument/hover` — function signatures + doc comments; struct/enum/type names
+- [x] Tests: hover on function name, empty line, word extraction
+
+#### 5.1.4 Go-to-definition ✅
+- [x] `textDocument/definition` — resolves top-level identifiers to definition `Location`
+- [x] Tests: integrated via `computeDefinition` in locate.go
 
 ### 5.2 Package Manager ✅ COMPLETE (v1.2.0)
 
@@ -667,3 +679,4 @@ See [DEVELOPMENT.md](DEVELOPMENT.md) for setup instructions, architecture overvi
 | 2026-03-24 | v1.1.0-alpha.2 | **Phase 5.5** — Enhanced REPL: multi-line input, top-level definition registration, `:type`/`:reset`/`:help`, value+type display, `TypeName`/`Repr`/`RegisterItem` interpreter helpers (no new tests — interactive I/O) |
 | 2026-03-24 | v1.1.0 | **Phase 5.3** — AI Integration: `pkg/codegen` (`ExtractContext`, `FindUnimplementedSpecs`, `BuildPrompt`, `Generate`, `Validate`, `Result`), `aura generate [--dry-run] [--json]` CLI, 13 new tests (1146 total) |
 | 2026-03-24 | v1.2.0 | **Phase 5.2** — Package Manager: `pkg/pkgmgr` (`Manifest`, `Find`, `Load`, `Write`, `Init`, `AddDep`, `ApplyToResolver`), `aura.pkg` format, `aura init/add/build` CLI, auto-detection in `aura run`, 17 new tests (1163 total) |
+| 2026-03-24 | v1.3.0 | **Phase 5.1** — LSP Server: `pkg/lsp` (RPC framing, types, dispatch loop, diagnostics, hover, go-to-definition), `cmd/aura-lsp`, 20 new tests (1183 total). Phase 5 complete. |

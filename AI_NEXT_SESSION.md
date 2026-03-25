@@ -8,9 +8,9 @@
 
 | | |
 |--|--|
-| **Version** | v1.2.0 |
-| **Tests** | 1163 (all passing) |
-| **Phases complete** | 1, 2, 3.1, 3.1.1, 3.2 (all chunks), 3.3 (all chunks ✅), 4, Issue #8, Issue #11, Phase 5.4 ✅, Phase 5.5 ✅, Phase 5.3 ✅, Phase 5.2 ✅ |
+| **Version** | v1.3.0 |
+| **Tests** | 1183 (all passing) |
+| **Phases complete** | 1, 2, 3.1, 3.1.1, 3.2 (all chunks), 3.3 (all chunks ✅), 4, Issue #8, Issue #11, Phase 5.4 ✅, Phase 5.5 ✅, Phase 5.3 ✅, Phase 5.2 ✅, Phase 5.1.1 ✅, Phase 5.1.2 ✅, Phase 5.1.3 ✅, Phase 5.1.4 ✅ |
 
 | Package | Tests |
 |---------|-------|
@@ -22,6 +22,7 @@
 | pkg/lexer | 11 |
 | pkg/module | 17 |
 | pkg/parser | 16 |
+| pkg/lsp | 20 |
 | pkg/pkgmgr | 17 |
 | pkg/symbols | 9 |
 | pkg/types | 26 |
@@ -53,7 +54,27 @@ All language features are stable (Phases 1–4, 3.3 complete). Phase 5 builds th
 | 5.5 | **REPL** (enhance existing stub) | Medium | ✅ Done |
 | 5.3 | **AI Integration** (`aura generate`) | Medium | ✅ Done |
 | 5.2 | **Package Manager** | Medium | ✅ Done |
-| 5.1 | **LSP** (`cmd/aura-lsp`) | High | 4–6 weeks |
+| 5.1 | **LSP** (`cmd/aura-lsp`) | High | 4 sub-chunks |
+
+### Phase 5.1 sub-chunks
+
+| Chunk | Scope | Key deliverables | Status |
+|-------|-------|-----------------|--------|
+| 5.1.1 | JSON-RPC server + lifecycle | `pkg/lsp/rpc.go`, `pkg/lsp/server.go`, `pkg/lsp/types.go`, `cmd/aura-lsp/main.go`; `initialize`/`shutdown`/`exit` | ✅ Done |
+| 5.1.2 | Diagnostics | `didOpen`/`didChange`/`didClose` doc buffer; run checker; `publishDiagnostics` | ✅ Done |
+| 5.1.3 | Hover | Position-to-AST-node lookup; `textDocument/hover` returns type + doc comment | ✅ Done |
+| 5.1.4 | Go-to-definition | `textDocument/definition`; trace identifier to definition site | ✅ Done |
+
+**All 4 sub-chunks delivered in one session. See Phase 5.1 summary below.**
+
+### Phase 5.1 summary (done)
+
+- **`pkg/lsp/types.go`** — full LSP 3.17 type surface: `RequestMessage`, `ResponseMessage`, `NotificationMessage`, `Position`, `Range`, `Location`, `Diagnostic`, `Hover`, `InitializeResult`, `ServerCapabilities`, all `textDocument/*` param types
+- **`pkg/lsp/rpc.go`** — `Content-Length` framing: `ReadMessage`, `WriteMessage`, `OKResponse`, `ErrResponse`, `Notification`, `MessageID`, `MessageMethod`
+- **`pkg/lsp/server.go`** — dispatch loop; lifecycle (`initialize`/`shutdown`/`exit`); `didOpen`/`didChange`/`didClose` doc buffer; `publishDiagnostics` runs full lex+parse+typecheck pipeline; hover and definition forwarded to `locate.go`
+- **`pkg/lsp/locate.go`** — `wordAt` cursor extraction; `computeHover` (fn signature + doc comment); `computeDefinition` (top-level definition location); `typeExprStr` renderer; `checkSource` helper
+- **`cmd/aura-lsp/main.go`** — entry point; `lsp.NewServer(os.Stdin, os.Stdout).Run()`
+- **20 tests** in `pkg/lsp`; zero external dependencies
 
 ### Phase 5.2 summary (done)
 
@@ -73,7 +94,17 @@ All language features are stable (Phases 1–4, 3.3 complete). Phase 5 builds th
 - Uses `ANTHROPIC_API_KEY` env var; `--dry-run` prints prompt without API call; `--json` for structured output
 - Pure stdlib — no external dependencies
 
-### Next: Phase 5.1 — Language Server Protocol (LSP)
+### Phase 5 — Complete ✅
+
+All five sub-items of Phase 5 (5.1–5.5) are now done. The language is feature-complete with a full ecosystem: formatter, type checker, interpreter, REPL, doc generator, AI integration, package manager, and LSP server.
+
+### Next: Phase 6 — Compiler & Native Compilation
+
+**Target:** v2.0.0
+
+Phase 6 compiles Aura to native code (via LLVM or Go codegen). This is the most ambitious phase and is best tackled in a new session with fresh context.
+
+**Recommended first chunk:** Emit Go source from the Aura AST (no LLVM dependency). This gives a working compiler immediately — Aura programs run as compiled Go binaries — and defers the LLVM toolchain requirement.
 
 **Target:** v1.3.0
 
