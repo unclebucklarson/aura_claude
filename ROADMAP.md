@@ -35,7 +35,7 @@ These principles guide every phase of development. When evaluating features, tra
 | 3.2 | Pattern Matching (Advanced) | ✅ COMPLETE | v0.9.0 | — |
 | 3.3 | Advanced Type Features | ✅ COMPLETE (all 4 chunks) | v1.0.0 | — |
 | 4 | Runtime & Standard Library | ✅ COMPLETE (4.1 ✅, 4.2 ✅, 4.3 ✅) | v0.8.0 | — |
-| 5 | Advanced Tooling & Ecosystem | 🔲 Not Started (next) | v1.1.0 | 4–6 weeks |
+| 5 | Advanced Tooling & Ecosystem | 🔄 In Progress (5.3/5.4/5.5 ✅) | v1.1.0 | 4–6 weeks |
 | 6 | Compiler & Native Compilation | 🔲 Not Started | v2.0.0 | 9–12 weeks |
 
 ---
@@ -374,7 +374,7 @@ Phase 4 delivers a complete runtime and standard library for Aura:
 
 ---
 
-## Phase 5: Advanced Tooling & Ecosystem — 🔲 NOT STARTED
+## Phase 5: Advanced Tooling & Ecosystem — 🔄 IN PROGRESS (5.3, 5.4, 5.5 ✅)
 
 **Goal:** Build the developer experience and ecosystem around Aura (LSP, Package Manager, AI Integration, Build System).
 
@@ -409,14 +409,15 @@ Phase 4 delivers a complete runtime and standard library for Aura:
 - [ ] Version resolution and lock files
 - [ ] Registry or Git-based package fetching
 
-### 5.3 AI Integration
+### 5.3 AI Integration ✅ COMPLETE (v1.1.0)
 
-**Complexity:** Medium | **Estimate:** 2–3 weeks
-
-- [ ] Spec-to-implementation generation pipeline
-- [ ] AST-aware code generation prompts
-- [ ] Automatic spec validation for AI-generated code
-- [ ] Structured output format for AI consumption
+- [x] Spec-to-implementation generation pipeline (`pkg/codegen`)
+- [x] AST-aware code generation prompts — `BuildPrompt` includes spec, types, functions, syntax guide
+- [x] Automatic spec validation for AI-generated code — `Validate` runs lexer+parser+checker
+- [x] Structured output format (`--json`) and dry-run mode (`--dry-run`)
+- [x] `aura generate [--dry-run] [--json] <file>` CLI command
+- [x] Uses `ANTHROPIC_API_KEY`; model configurable (defaults to `claude-opus-4-6`)
+- [x] `pkg/codegen` package — 13 tests
 
 ### 5.4 Documentation Generator ✅ COMPLETE (v1.1.0-alpha.1)
 
@@ -664,3 +665,4 @@ See [DEVELOPMENT.md](DEVELOPMENT.md) for setup instructions, architecture overvi
 | 2026-03-24 | v1.0.0 | **Issue #11** — String concat O(n²) fixed: `collectConcatLeaves` + `evalConcatChain` in eval.go, 1 new test (1121 total). No open debt remaining. |
 | 2026-03-24 | v1.1.0-alpha.1 | **Phase 5.4** — Documentation Generator: `pkg/docgen`, `aura doc [--json]`, parser doc-comment attachment (`collectDocComments`, `skipNewlinesKeepDoc`), 12 new tests (1133 total) |
 | 2026-03-24 | v1.1.0-alpha.2 | **Phase 5.5** — Enhanced REPL: multi-line input, top-level definition registration, `:type`/`:reset`/`:help`, value+type display, `TypeName`/`Repr`/`RegisterItem` interpreter helpers (no new tests — interactive I/O) |
+| 2026-03-24 | v1.1.0 | **Phase 5.3** — AI Integration: `pkg/codegen` (`ExtractContext`, `FindUnimplementedSpecs`, `BuildPrompt`, `Generate`, `Validate`, `Result`), `aura generate [--dry-run] [--json]` CLI, 13 new tests (1146 total) |

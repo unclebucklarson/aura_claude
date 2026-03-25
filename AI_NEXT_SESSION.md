@@ -8,13 +8,14 @@
 
 | | |
 |--|--|
-| **Version** | v1.0.0 |
-| **Tests** | 1133 (all passing) |
-| **Phases complete** | 1, 2, 3.1, 3.1.1, 3.2 (all chunks), 3.3 (all chunks ✅), 4, Issue #8, Issue #11, Phase 5.4 ✅, Phase 5.5 ✅ |
+| **Version** | v1.1.0 |
+| **Tests** | 1146 (all passing) |
+| **Phases complete** | 1, 2, 3.1, 3.1.1, 3.2 (all chunks), 3.3 (all chunks ✅), 4, Issue #8, Issue #11, Phase 5.4 ✅, Phase 5.5 ✅, Phase 5.3 ✅ |
 
 | Package | Tests |
 |---------|-------|
 | pkg/checker | 129 |
+| pkg/codegen | 13 |
 | pkg/formatter | 9 |
 | pkg/docgen | 12 |
 | pkg/interpreter | 904 |
@@ -39,35 +40,37 @@
 
 ## Next: Phase 5 — Advanced Tooling & Ecosystem
 
-**Target:** v1.1.0 | **Roadmap:** `ROADMAP.md` §5
+**Target:** v1.2.0 | **Roadmap:** `ROADMAP.md` §5
 
 All language features are stable (Phases 1–4, 3.3 complete). Phase 5 builds the developer experience and ecosystem on top of the current interpreter.
 
-### Recommended order (lowest to highest complexity)
+### Remaining items
 
 | Section | Item | Complexity | Estimate |
 |---------|------|-----------|----------|
 | 5.4 | **Documentation Generator** (`aura doc`) | Low-Medium | ✅ Done |
 | 5.5 | **REPL** (enhance existing stub) | Medium | ✅ Done |
-| 5.3 | **AI Integration** (spec-to-impl pipeline) | Medium | 2–3 weeks |
+| 5.3 | **AI Integration** (`aura generate`) | Medium | ✅ Done |
 | 5.2 | **Package Manager** | Medium | 3–4 weeks |
 | 5.1 | **LSP** (`cmd/aura-lsp`) | High | 4–6 weeks |
 
-### Design decisions to settle before starting
+### Phase 5.3 summary (done)
 
-1. **5.4 Doc Generator** — output format: Markdown (simpler, no external deps) vs. HTML (richer). Recommend Markdown first, HTML as a follow-up.
-2. **5.5 REPL** — `aura repl` is already stubbed in `cmd/aura`. Decide scope: expression-only vs. full statement support, `:type` introspection depth.
-3. **5.3 AI Integration** — requires Claude API key in environment; not pure stdlib. Decide if this is in-process or a CLI pipeline.
-4. **5.1 LSP** — requires `gopls`-style architecture; most impactful but most complex. Can be deferred until after 5.4/5.5/5.3.
+- **`pkg/codegen/codegen.go`** — new package: `ExtractContext`, `FindUnimplementedSpecs`, `BuildPrompt`, `Generate` (Anthropic API), `Validate`, `Result`
+- **`pkg/codegen/codegen_test.go`** — 13 tests covering `stripFences`, `FindUnimplementedSpecs`, `ExtractContext`, `BuildPrompt`, `Validate`
+- **`cmd/aura/main.go`** — `aura generate [--dry-run] [--json] <file>` subcommand
+- Uses `ANTHROPIC_API_KEY` env var; `--dry-run` prints prompt without API call; `--json` for structured output
+- Pure stdlib — no external dependencies
 
-### Chunk 1 suggestion — 5.4 Documentation Generator
+### Next: Phase 5.2 — Package Manager
 
-Start here: low risk, builds directly on the existing AST, no new dependencies.
+**Recommended first steps:**
 
-**What to build:**
-- `aura doc <file>` CLI command
-- Walk AST, extract `##` doc comments attached to `FnDef`, `StructDef`, `EnumDef`, `TraitDef`, `SpecDef`
-- Emit Markdown: function signatures with types + effects + doc text; struct fields; enum variants; spec guarantees/errors
-- `aura doc --json <file>` for structured output (AI-consumable)
+1. Define package manifest format (`aura.toml` or `aura.pkg`) — name, version, dependencies
+2. `aura init` — scaffold a new package
+3. `aura add <package>` — add a dependency (initially local path deps)
+4. `aura build` — resolve imports across packages
 
-**Key files:** `cmd/aura/main.go` (new subcommand), new `pkg/docgen/docgen.go`
+**Key design decision:** local-path-only deps first (no registry), then registry later. Keeps it simple.
+
+**Key files:** new `cmd/aura/main.go` subcommands, new `pkg/pkgmgr/` package
