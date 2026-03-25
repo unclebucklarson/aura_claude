@@ -16,32 +16,14 @@ func registerStringMethods() {
 		return &IntVal{Val: int64(utf8.RuneCountInString(s))}
 	})
 
-	// length() -> Int — Alias for len
-	RegisterMethod(TypeString, "length", func(receiver Value, args []Value) Value {
-		s := receiver.(*StringVal).Val
-		return &IntVal{Val: int64(utf8.RuneCountInString(s))}
-	})
-
 	// upper() -> String — Convert to uppercase
 	RegisterMethod(TypeString, "upper", func(receiver Value, args []Value) Value {
 		s := receiver.(*StringVal).Val
 		return &StringVal{Val: strings.ToUpper(s)}
 	})
 
-	// to_upper() -> String — Alias for upper
-	RegisterMethod(TypeString, "to_upper", func(receiver Value, args []Value) Value {
-		s := receiver.(*StringVal).Val
-		return &StringVal{Val: strings.ToUpper(s)}
-	})
-
 	// lower() -> String — Convert to lowercase
 	RegisterMethod(TypeString, "lower", func(receiver Value, args []Value) Value {
-		s := receiver.(*StringVal).Val
-		return &StringVal{Val: strings.ToLower(s)}
-	})
-
-	// to_lower() -> String — Alias for lower
-	RegisterMethod(TypeString, "to_lower", func(receiver Value, args []Value) Value {
 		s := receiver.(*StringVal).Val
 		return &StringVal{Val: strings.ToLower(s)}
 	})

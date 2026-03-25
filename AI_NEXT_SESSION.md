@@ -8,8 +8,8 @@
 
 | | |
 |--|--|
-| **Version** | v2.0.0 |
-| **Tests** | 1197 (all passing) |
+| **Version** | v2.0.1 |
+| **Tests** | 1193 (all passing) |
 | **Phases complete** | 1, 2, 3.1, 3.1.1, 3.2 (all chunks), 3.3 (all chunks ✅), 4, Issue #8, Issue #11, Phase 5.4 ✅, Phase 5.5 ✅, Phase 5.3 ✅, Phase 5.2 ✅, Phase 5.1.1 ✅, Phase 5.1.2 ✅, Phase 5.1.3 ✅, Phase 5.1.4 ✅, Phase 6.1 ✅ |
 
 | Package | Tests |
@@ -19,6 +19,7 @@
 | pkg/formatter | 9 |
 | pkg/docgen | 12 |
 | pkg/goemit | 14 |
+
 | pkg/interpreter | 904 |
 | pkg/lexer | 11 |
 | pkg/module | 17 |

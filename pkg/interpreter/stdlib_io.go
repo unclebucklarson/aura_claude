@@ -1,6 +1,11 @@
 package interpreter
 
-import "fmt"
+import (
+	"bufio"
+	"fmt"
+	"os"
+	"strings"
+)
 
 // createStdIoExports creates exports for the std.io module.
 func createStdIoExports() map[string]Value {
@@ -50,6 +55,35 @@ func createStdIoExports() map[string]Value {
 				result = result[:idx] + a.String() + result[idx+2:]
 			}
 			return &StringVal{Val: result}
+		},
+	}
+
+	// read_line() -> Option[String] — Read a line from stdin (None on EOF).
+	exports["read_line"] = &BuiltinFnVal{
+		Name: "io.read_line",
+		Fn: func(args []Value) Value {
+			reader := bufio.NewReader(os.Stdin)
+			line, err := reader.ReadString('\n')
+			if err != nil && line == "" {
+				return &OptionVal{IsSome: false}
+			}
+			return &OptionVal{IsSome: true, Val: &StringVal{Val: strings.TrimRight(line, "\r\n")}}
+		},
+	}
+
+	// input(prompt?) -> String — Print optional prompt then read a line from stdin.
+	// Returns empty string on EOF.
+	exports["input"] = &BuiltinFnVal{
+		Name: "io.input",
+		Fn: func(args []Value) Value {
+			if len(args) >= 1 {
+				if prompt, ok := args[0].(*StringVal); ok {
+					fmt.Print(prompt.Val)
+				}
+			}
+			reader := bufio.NewReader(os.Stdin)
+			line, _ := reader.ReadString('\n')
+			return &StringVal{Val: strings.TrimRight(line, "\r\n")}
 		},
 	}
 

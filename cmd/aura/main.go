@@ -191,7 +191,11 @@ func main() {
 				fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				os.Exit(1)
 			}
-			os.Exit(runRun(src, filePath))
+			userArgs := []string{}
+			if len(os.Args) > 3 {
+				userArgs = os.Args[3:]
+			}
+			os.Exit(runRun(src, filePath, userArgs))
 
 		case "test":
 			filePath := os.Args[2]
@@ -581,7 +585,7 @@ func runCheck(src, file string, jsonOutput bool) int {
 	return 0
 }
 
-func runRun(src, file string) int {
+func runRun(src, file string, userArgs []string) int {
 	mod, code := parseSource(src, file)
 	if code != 0 {
 		return code
@@ -601,7 +605,7 @@ func runRun(src, file string) int {
 	if m, err := pkgmgr.FindAndLoad(baseDir); err == nil && m != nil {
 		pkgmgr.ApplyToResolver(m, resolver)
 	}
-	effects := interpreter.NewEffectContext()
+	effects := interpreter.NewEffectContext().WithEnv(interpreter.NewRealEnvProvider(userArgs))
 
 	interp := interpreter.NewWithResolverAndEffects(mod, absPath, resolver, effects)
 	_, err := interp.Run()

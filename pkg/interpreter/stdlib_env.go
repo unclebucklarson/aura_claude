@@ -1,6 +1,9 @@
 package interpreter
 
-import "fmt"
+import (
+	"fmt"
+	"os"
+)
 
 // createStdEnvExports creates the exports for the std.env module.
 // The env provider is captured via closure, enabling effect mocking.
@@ -107,6 +110,21 @@ func createStdEnvExports(ep EnvProvider) map[string]Value {
 				elements[i] = &StringVal{Val: a}
 			}
 			return &ListVal{Elements: elements}
+		},
+	}
+
+	// exit(code?) -> None — Terminate the process with an exit code (default 0).
+	exports["exit"] = &BuiltinFnVal{
+		Name: "env.exit",
+		Fn: func(args []Value) Value {
+			code := 0
+			if len(args) >= 1 {
+				if c, ok := args[0].(*IntVal); ok {
+					code = int(c.Val)
+				}
+			}
+			os.Exit(code)
+			return &NoneVal{} // unreachable
 		},
 	}
 

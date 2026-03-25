@@ -144,7 +144,7 @@ func NewEffectContext() *EffectContext {
         return &EffectContext{
                 file: &RealFileProvider{},
                 time: &RealTimeProvider{},
-                envp: &RealEnvProvider{},
+                envp: NewRealEnvProvider([]string{}),
                 net:  &RealNetProvider{},
                 log:  NewRealLogProvider(),
         }
@@ -595,7 +595,15 @@ func (m *MockTimeProvider) Sleep(ms int) {
 // --- Real Env Provider ---
 
 // RealEnvProvider implements EnvProvider using Go's os package.
-type RealEnvProvider struct{}
+// userArgs holds only the arguments intended for the Aura program (not the toolchain prefix).
+type RealEnvProvider struct {
+        userArgs []string
+}
+
+// NewRealEnvProvider creates a RealEnvProvider with the given user-facing arguments.
+func NewRealEnvProvider(userArgs []string) *RealEnvProvider {
+        return &RealEnvProvider{userArgs: userArgs}
+}
 
 func (r *RealEnvProvider) Get(key string) (string, bool) {
         return os.LookupEnv(key)
@@ -626,7 +634,7 @@ func (r *RealEnvProvider) Cwd() (string, error) {
 }
 
 func (r *RealEnvProvider) Args() []string {
-        return os.Args
+        return r.userArgs
 }
 
 // --- Mock Env Provider ---

@@ -1259,10 +1259,11 @@ func (c *Checker) inferExpr(expr ast.Expr) *types.Type {
 }
 
 func (c *Checker) inferIdentifier(e *ast.Identifier) *types.Type {
-        // Check if it's an effect capability (db, time, net, fs, random, auth, log)
+        // Check if it's an effect capability
         knownEffects := map[string]bool{
-                "db": true, "net": true, "fs": true, "time": true,
+                "db": true, "net": true, "file": true, "time": true,
                 "random": true, "auth": true, "log": true,
+                "io": true, "env": true,
         }
         if knownEffects[e.Name] {
                 // Effect capabilities are valid identifiers when declared
@@ -1541,8 +1542,9 @@ func (c *Checker) checkEffectCapabilityUsage(name string, span token.Span) {
         }
         // Known effect capabilities
         knownEffects := map[string]bool{
-                "db": true, "net": true, "fs": true, "time": true,
+                "db": true, "net": true, "file": true, "time": true,
                 "random": true, "auth": true, "log": true,
+                "io": true, "env": true,
         }
         if knownEffects[name] && !c.currentEffects[name] {
                 fnName := ""

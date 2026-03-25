@@ -166,10 +166,16 @@ func TestRealEnvProvider_Cwd(t *testing.T) {
 }
 
 func TestRealEnvProvider_Args(t *testing.T) {
-	ep := &RealEnvProvider{}
-	args := ep.Args()
-	if len(args) == 0 {
-		t.Error("RealEnvProvider.Args() returned empty slice")
+	// Without user args, Args() returns empty slice (toolchain args are stripped).
+	ep := NewRealEnvProvider([]string{})
+	if len(ep.Args()) != 0 {
+		t.Error("RealEnvProvider.Args() should return empty slice when no user args provided")
+	}
+	// With user args, Args() returns exactly what was passed.
+	ep2 := NewRealEnvProvider([]string{"--flag", "value"})
+	args := ep2.Args()
+	if len(args) != 2 || args[0] != "--flag" || args[1] != "value" {
+		t.Errorf("RealEnvProvider.Args() = %v, want [--flag value]", args)
 	}
 }
 

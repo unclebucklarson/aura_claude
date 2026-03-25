@@ -27,18 +27,6 @@ func registerMapMethods() {
 		return &IntVal{Val: int64(len(m.Keys))}
 	})
 
-	// length() -> Int — Alias for len
-	RegisterMethod(TypeMap, "length", func(receiver Value, args []Value) Value {
-		m := receiver.(*MapVal)
-		return &IntVal{Val: int64(len(m.Keys))}
-	})
-
-	// size() -> Int — Alias for len
-	RegisterMethod(TypeMap, "size", func(receiver Value, args []Value) Value {
-		m := receiver.(*MapVal)
-		return &IntVal{Val: int64(len(m.Keys))}
-	})
-
 	// is_empty() -> Bool — Check if map is empty
 	RegisterMethod(TypeMap, "is_empty", func(receiver Value, args []Value) Value {
 		m := receiver.(*MapVal)

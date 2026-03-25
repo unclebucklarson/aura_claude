@@ -263,7 +263,7 @@ func TestConstraintRefinementTypeUnaffected(t *testing.T) {
 	errs := checkSource(t, `module test
 
 type Age = Int where self >= 0
-type Name = String where self.length() > 0
+type Name = String where self.len() > 0
 `)
 	expectNoErrors(t, errs)
 }

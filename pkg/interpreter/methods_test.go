@@ -72,15 +72,6 @@ fn test() -> String:
         expectString(t, result, "HELLO WORLD")
 }
 
-func TestStringToUpper(t *testing.T) {
-        src := `
-fn test() -> String:
-    return "hello".to_upper()
-`
-        result := runFunc(t, src, "test", nil)
-        expectString(t, result, "HELLO")
-}
-
 func TestStringLower(t *testing.T) {
         src := `
 fn test() -> String:
@@ -88,15 +79,6 @@ fn test() -> String:
 `
         result := runFunc(t, src, "test", nil)
         expectString(t, result, "hello world")
-}
-
-func TestStringToLower(t *testing.T) {
-        src := `
-fn test() -> String:
-    return "HELLO".to_lower()
-`
-        result := runFunc(t, src, "test", nil)
-        expectString(t, result, "hello")
 }
 
 func TestStringContains(t *testing.T) {
@@ -1184,23 +1166,6 @@ fn test() -> Int:
         expectInt(t, runFunc(t, src, "test", nil), 0)
 }
 
-func TestMapLengthAlias(t *testing.T) {
-        src := `
-fn test() -> Int:
-    let m = {"x": 10}
-    return m.length()
-`
-        expectInt(t, runFunc(t, src, "test", nil), 1)
-}
-
-func TestMapSizeAlias(t *testing.T) {
-        src := `
-fn test() -> Int:
-    let m = {"a": 1, "b": 2}
-    return m.size()
-`
-        expectInt(t, runFunc(t, src, "test", nil), 2)
-}
 
 func TestMapIsEmpty(t *testing.T) {
         src := `

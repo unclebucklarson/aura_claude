@@ -24,12 +24,6 @@ func registerListMethods() {
                 return &IntVal{Val: int64(len(list.Elements))}
         })
 
-        // length() -> Int — Alias for len
-        RegisterMethod(TypeList, "length", func(receiver Value, args []Value) Value {
-                list := receiver.(*ListVal)
-                return &IntVal{Val: int64(len(list.Elements))}
-        })
-
         // append(item) -> None — Append item to list (mutates)
         RegisterMethod(TypeList, "append", func(receiver Value, args []Value) Value {
                 list := receiver.(*ListVal)
