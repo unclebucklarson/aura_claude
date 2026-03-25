@@ -32,7 +32,7 @@
 
 ## Open Debt
 
-**No open debt remaining.**
+**`user_docs/examples.md` — full rewrite needed.** The file uses completely wrong syntax throughout (curly-brace blocks `fn f(x) { ... }` instead of Aura's colon+indent style, `//` comments instead of `#`, etc.). Every example in the file is invalid Aura. Rewrite all examples to use correct syntax before the file can serve as reference material.
 
 ---
 
