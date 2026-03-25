@@ -9,6 +9,9 @@
 //	aura test     <file.aura>                    - Run test blocks in an Aura file
 //	aura doc      [--json] <file.aura>           - Generate documentation from an Aura source file
 //	aura generate [--dry-run] [--json] <file>    - Generate implementations for unimplemented specs
+//	aura init     [name]                         - Create a new aura.pkg manifest in the current directory
+//	aura add      <alias> <path>                 - Add a local package dependency
+//	aura build                                   - Verify all dependencies resolve
 //	aura repl                                    - Interactive REPL
 package main
 
@@ -28,6 +31,7 @@ import (
 	"github.com/unclebucklarson/aura/pkg/lexer"
 	"github.com/unclebucklarson/aura/pkg/module"
 	"github.com/unclebucklarson/aura/pkg/parser"
+	"github.com/unclebucklarson/aura/pkg/pkgmgr"
 )
 
 func main() {
@@ -39,6 +43,24 @@ func main() {
 	command := os.Args[1]
 
 	switch command {
+	case "init":
+		name := ""
+		if len(os.Args) >= 3 {
+			name = os.Args[2]
+		}
+		os.Exit(runInit(name))
+
+	case "add":
+		if len(os.Args) < 4 {
+			fmt.Fprintln(os.Stderr, "error: usage: aura add <alias> <path>")
+			printUsage()
+			os.Exit(1)
+		}
+		os.Exit(runAdd(os.Args[2], os.Args[3]))
+
+	case "build":
+		os.Exit(runBuild())
+
 	case "repl":
 		os.Exit(runRepl())
 
@@ -183,6 +205,9 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  test      Run test blocks in an Aura file")
 	fmt.Fprintln(os.Stderr, "  doc       Generate documentation from an Aura source file")
 	fmt.Fprintln(os.Stderr, "  generate  Generate implementations for unimplemented specs (requires ANTHROPIC_API_KEY)")
+	fmt.Fprintln(os.Stderr, "  init      Create a new aura.pkg manifest in the current directory")
+	fmt.Fprintln(os.Stderr, "  add       Add a local package dependency: aura add <alias> <path>")
+	fmt.Fprintln(os.Stderr, "  build     Verify all dependencies in aura.pkg resolve correctly")
 	fmt.Fprintln(os.Stderr, "  repl      Interactive REPL")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Options:")
@@ -289,6 +314,98 @@ func printGenerateText(results []*codegen.Result, dryRun bool) {
 		}
 		fmt.Println()
 	}
+}
+
+func runInit(name string) int {
+	cwd, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
+	}
+	if name == "" {
+		name = filepath.Base(cwd)
+	}
+	if err := pkgmgr.Init(cwd, name); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
+	}
+	fmt.Printf("Created aura.pkg for package %q\n", name)
+	return 0
+}
+
+func runAdd(alias, depPath string) int {
+	cwd, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
+	}
+	manifestPath, err := pkgmgr.Find(cwd)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
+	}
+	if manifestPath == "" {
+		fmt.Fprintln(os.Stderr, "error: no aura.pkg found; run 'aura init' first")
+		return 1
+	}
+	m, err := pkgmgr.Load(manifestPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
+	}
+	if err := pkgmgr.AddDep(m, alias, depPath); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
+	}
+	if err := pkgmgr.Write(m); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
+	}
+	abs, _ := filepath.Abs(depPath)
+	fmt.Printf("Added dependency %q -> %s\n", alias, abs)
+	return 0
+}
+
+func runBuild() int {
+	cwd, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
+	}
+	m, err := pkgmgr.FindAndLoad(cwd)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
+	}
+	if m == nil {
+		fmt.Fprintln(os.Stderr, "error: no aura.pkg found; run 'aura init' first")
+		return 1
+	}
+
+	fmt.Printf("Package: %s  v%s\n", m.Name, m.Version)
+	if len(m.Deps) == 0 {
+		fmt.Println("Dependencies: none")
+		fmt.Println("Build OK")
+		return 0
+	}
+
+	fmt.Printf("Dependencies (%d):\n", len(m.Deps))
+	ok := true
+	for _, d := range m.Deps {
+		fi, err := os.Stat(d.Path)
+		if err != nil || !fi.IsDir() {
+			fmt.Printf("  ✗ %s -> %s (not found)\n", d.Alias, d.Path)
+			ok = false
+		} else {
+			fmt.Printf("  ✓ %s -> %s\n", d.Alias, d.Path)
+		}
+	}
+	if ok {
+		fmt.Println("Build OK")
+		return 0
+	}
+	fmt.Fprintln(os.Stderr, "Build failed: one or more dependencies could not be resolved")
+	return 1
 }
 
 func parseSource(src, file string) (*ast.Module, int) {
@@ -406,6 +523,10 @@ func runRun(src, file string) int {
 
 	// Create module resolver and effect context for full stdlib/import support
 	resolver := module.NewResolver(baseDir)
+	// Auto-detect aura.pkg and inject dep search paths into resolver.
+	if m, err := pkgmgr.FindAndLoad(baseDir); err == nil && m != nil {
+		pkgmgr.ApplyToResolver(m, resolver)
+	}
 	effects := interpreter.NewEffectContext()
 
 	interp := interpreter.NewWithResolverAndEffects(mod, absPath, resolver, effects)

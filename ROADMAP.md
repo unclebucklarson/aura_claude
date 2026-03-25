@@ -35,7 +35,7 @@ These principles guide every phase of development. When evaluating features, tra
 | 3.2 | Pattern Matching (Advanced) | ✅ COMPLETE | v0.9.0 | — |
 | 3.3 | Advanced Type Features | ✅ COMPLETE (all 4 chunks) | v1.0.0 | — |
 | 4 | Runtime & Standard Library | ✅ COMPLETE (4.1 ✅, 4.2 ✅, 4.3 ✅) | v0.8.0 | — |
-| 5 | Advanced Tooling & Ecosystem | 🔄 In Progress (5.3/5.4/5.5 ✅) | v1.1.0 | 4–6 weeks |
+| 5 | Advanced Tooling & Ecosystem | 🔄 In Progress (5.2/5.3/5.4/5.5 ✅) | v1.2.0 | 4–6 weeks |
 | 6 | Compiler & Native Compilation | 🔲 Not Started | v2.0.0 | 9–12 weeks |
 
 ---
@@ -374,7 +374,7 @@ Phase 4 delivers a complete runtime and standard library for Aura:
 
 ---
 
-## Phase 5: Advanced Tooling & Ecosystem — 🔄 IN PROGRESS (5.3, 5.4, 5.5 ✅)
+## Phase 5: Advanced Tooling & Ecosystem — 🔄 IN PROGRESS (5.2, 5.3, 5.4, 5.5 ✅)
 
 **Goal:** Build the developer experience and ecosystem around Aura (LSP, Package Manager, AI Integration, Build System).
 
@@ -400,14 +400,14 @@ Phase 4 delivers a complete runtime and standard library for Aura:
 
 **Package:** `cmd/aura-lsp`
 
-### 5.2 Package Manager
+### 5.2 Package Manager ✅ COMPLETE (v1.2.0)
 
-**Complexity:** Medium | **Estimate:** 3–4 weeks
-
-- [ ] Module resolution and dependency management
-- [ ] Package manifest file format (`aura.toml`)
-- [ ] Version resolution and lock files
-- [ ] Registry or Git-based package fetching
+- [x] Package manifest file format (`aura.pkg`) — `key = value` + `[deps]` section; relative paths resolved at load time
+- [x] `aura init [name]` — creates `aura.pkg` in current directory
+- [x] `aura add <alias> <local-path>` — adds/updates a local path dependency
+- [x] `aura build` — verifies all dep directories resolve; reports status
+- [x] Auto-detection in `aura run` — walks up directory tree from source file, applies dep search paths to resolver
+- [x] `pkg/pkgmgr` package — 17 tests
 
 ### 5.3 AI Integration ✅ COMPLETE (v1.1.0)
 
@@ -666,3 +666,4 @@ See [DEVELOPMENT.md](DEVELOPMENT.md) for setup instructions, architecture overvi
 | 2026-03-24 | v1.1.0-alpha.1 | **Phase 5.4** — Documentation Generator: `pkg/docgen`, `aura doc [--json]`, parser doc-comment attachment (`collectDocComments`, `skipNewlinesKeepDoc`), 12 new tests (1133 total) |
 | 2026-03-24 | v1.1.0-alpha.2 | **Phase 5.5** — Enhanced REPL: multi-line input, top-level definition registration, `:type`/`:reset`/`:help`, value+type display, `TypeName`/`Repr`/`RegisterItem` interpreter helpers (no new tests — interactive I/O) |
 | 2026-03-24 | v1.1.0 | **Phase 5.3** — AI Integration: `pkg/codegen` (`ExtractContext`, `FindUnimplementedSpecs`, `BuildPrompt`, `Generate`, `Validate`, `Result`), `aura generate [--dry-run] [--json]` CLI, 13 new tests (1146 total) |
+| 2026-03-24 | v1.2.0 | **Phase 5.2** — Package Manager: `pkg/pkgmgr` (`Manifest`, `Find`, `Load`, `Write`, `Init`, `AddDep`, `ApplyToResolver`), `aura.pkg` format, `aura init/add/build` CLI, auto-detection in `aura run`, 17 new tests (1163 total) |
