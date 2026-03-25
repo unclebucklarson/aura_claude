@@ -11,7 +11,7 @@
 //	aura generate [--dry-run] [--json] <file>    - Generate implementations for unimplemented specs
 //	aura init     [name]                         - Create a new aura.pkg manifest in the current directory
 //	aura add      <alias> <path>                 - Add a local package dependency
-//	aura build                                   - Verify all dependencies resolve
+//	aura build    [--output <file>] <file.aura>  - Compile Aura source to a Go binary
 //	aura repl                                    - Interactive REPL
 package main
 
@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -26,6 +27,7 @@ import (
 	"github.com/unclebucklarson/aura/pkg/checker"
 	"github.com/unclebucklarson/aura/pkg/codegen"
 	"github.com/unclebucklarson/aura/pkg/docgen"
+	"github.com/unclebucklarson/aura/pkg/goemit"
 	"github.com/unclebucklarson/aura/pkg/formatter"
 	"github.com/unclebucklarson/aura/pkg/interpreter"
 	"github.com/unclebucklarson/aura/pkg/lexer"
@@ -59,7 +61,29 @@ func main() {
 		os.Exit(runAdd(os.Args[2], os.Args[3]))
 
 	case "build":
-		os.Exit(runBuild())
+		output := ""
+		filePath := ""
+		for i, arg := range os.Args[2:] {
+			if arg == "--output" && i+1 < len(os.Args[2:]) {
+				output = os.Args[2:][i+1]
+			} else if arg != "" && !strings.HasPrefix(arg, "--") {
+				filePath = arg
+			}
+		}
+		if filePath == "" {
+			fmt.Fprintln(os.Stderr, "error: no file specified")
+			printUsage()
+			os.Exit(1)
+		}
+		src, err := readFile(filePath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		os.Exit(runCompile(src, filePath, output))
+
+	case "deps":
+		os.Exit(runDeps())
 
 	case "repl":
 		os.Exit(runRepl())
@@ -207,7 +231,8 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  generate  Generate implementations for unimplemented specs (requires ANTHROPIC_API_KEY)")
 	fmt.Fprintln(os.Stderr, "  init      Create a new aura.pkg manifest in the current directory")
 	fmt.Fprintln(os.Stderr, "  add       Add a local package dependency: aura add <alias> <path>")
-	fmt.Fprintln(os.Stderr, "  build     Verify all dependencies in aura.pkg resolve correctly")
+	fmt.Fprintln(os.Stderr, "  build     Compile Aura source to a Go binary: aura build [--output <file>] <file.aura>")
+	fmt.Fprintln(os.Stderr, "  deps      Verify all dependencies in aura.pkg resolve correctly")
 	fmt.Fprintln(os.Stderr, "  repl      Interactive REPL")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Options:")
@@ -366,7 +391,7 @@ func runAdd(alias, depPath string) int {
 	return 0
 }
 
-func runBuild() int {
+func runDeps() int {
 	cwd, err := os.Getwd()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -406,6 +431,55 @@ func runBuild() int {
 	}
 	fmt.Fprintln(os.Stderr, "Build failed: one or more dependencies could not be resolved")
 	return 1
+}
+
+func runCompile(src, filePath, output string) int {
+	mod, code := parseSource(src, filePath)
+	if code != 0 {
+		return code
+	}
+
+	em := goemit.New()
+	goSrc, warns := em.Emit(mod)
+	for _, w := range warns {
+		fmt.Fprintf(os.Stderr, "warning: %s\n", w)
+	}
+
+	// Write generated Go source to a temp file.
+	tmpDir, err := os.MkdirTemp("", "aura-build-*")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
+	}
+	defer os.RemoveAll(tmpDir)
+
+	tmpGo := filepath.Join(tmpDir, "main.go")
+	if err := os.WriteFile(tmpGo, []byte(goSrc), 0644); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
+	}
+
+	// Determine output binary name.
+	if output == "" {
+		base := strings.TrimSuffix(filepath.Base(filePath), ".aura")
+		output = base
+	}
+	absOut, err := filepath.Abs(output)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
+	}
+
+	cmd := exec.Command("go", "build", "-o", absOut, tmpGo)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "compile error: %v\n", err)
+		return 1
+	}
+
+	fmt.Printf("Built %s\n", absOut)
+	return 0
 }
 
 func parseSource(src, file string) (*ast.Module, int) {

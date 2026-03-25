@@ -8,9 +8,9 @@
 
 | | |
 |--|--|
-| **Version** | v1.3.0 |
-| **Tests** | 1183 (all passing) |
-| **Phases complete** | 1, 2, 3.1, 3.1.1, 3.2 (all chunks), 3.3 (all chunks ✅), 4, Issue #8, Issue #11, Phase 5.4 ✅, Phase 5.5 ✅, Phase 5.3 ✅, Phase 5.2 ✅, Phase 5.1.1 ✅, Phase 5.1.2 ✅, Phase 5.1.3 ✅, Phase 5.1.4 ✅ |
+| **Version** | v2.0.0 |
+| **Tests** | 1197 (all passing) |
+| **Phases complete** | 1, 2, 3.1, 3.1.1, 3.2 (all chunks), 3.3 (all chunks ✅), 4, Issue #8, Issue #11, Phase 5.4 ✅, Phase 5.5 ✅, Phase 5.3 ✅, Phase 5.2 ✅, Phase 5.1.1 ✅, Phase 5.1.2 ✅, Phase 5.1.3 ✅, Phase 5.1.4 ✅, Phase 6.1 ✅ |
 
 | Package | Tests |
 |---------|-------|
@@ -18,6 +18,7 @@
 | pkg/codegen | 13 |
 | pkg/formatter | 9 |
 | pkg/docgen | 12 |
+| pkg/goemit | 14 |
 | pkg/interpreter | 904 |
 | pkg/lexer | 11 |
 | pkg/module | 17 |
@@ -98,24 +99,25 @@ All language features are stable (Phases 1–4, 3.3 complete). Phase 5 builds th
 
 All five sub-items of Phase 5 (5.1–5.5) are now done. The language is feature-complete with a full ecosystem: formatter, type checker, interpreter, REPL, doc generator, AI integration, package manager, and LSP server.
 
-### Next: Phase 6 — Compiler & Native Compilation
+### Phase 6.1 — Go-source Compiler ✅
 
-**Target:** v2.0.0
+**Delivered:** v2.0.0
 
-Phase 6 compiles Aura to native code (via LLVM or Go codegen). This is the most ambitious phase and is best tackled in a new session with fresh context.
+- **`pkg/goemit/emitter.go`** — Aura AST → Go source
+  - Runtime preamble: `auraOption[T]`, `auraResult[T,E]` generic structs + `auraSome`/`auraNone`/`auraOk`/`auraErr` helpers
+  - Type mapping: Int→int64, Float→float64, [T]→[]T, {K:V}→map[K]V, Option[T]→auraOption[T], Result[T,E]→auraResult[T,E]
+  - Unit enums → `type Name int` + iota consts; tagged enums → interface + per-variant structs
+  - String interpolation → `fmt.Sprintf`; pipeline `|>` → function call inversion
+  - Package detection: module with `main()` → `package main`, library → package name
+- **`pkg/goemit/emitter_test.go`** — 14 tests (HelloWorld, Arithmetic, Struct, SimpleEnum, IfElse, ForLoop, WhileLoop, OptionType, StringInterpolation, ListExpr, TypeDef, FormattedOutput, PackageName, NonMainPackage)
+- **`aura build [--output <file>] <file.aura>`** — emits Go, invokes `go build`, produces native binary
+- **`aura deps`** — verifies all `aura.pkg` dependencies resolve (formerly `aura build` pkgmgr check)
 
-**Recommended first chunk:** Emit Go source from the Aura AST (no LLVM dependency). This gives a working compiler immediately — Aura programs run as compiled Go binaries — and defers the LLVM toolchain requirement.
+### Next: Phase 6.2 — Compiler Improvements
 
-**Target:** v1.3.0
-
-This is the most complex remaining item. Requires a full LSP server (`cmd/aura-lsp`) responding to the JSON-RPC protocol over stdin/stdout.
-
-**Recommended starting scope (MVP):**
-- `initialize` / `shutdown` lifecycle
-- `textDocument/publishDiagnostics` — run type checker on save, push errors
-- `textDocument/hover` — show type + doc comment for identifier under cursor
-- `textDocument/definition` — go to function/type definition
-
-**Key design decision to settle first:** LSP servers communicate over stdin/stdout JSON-RPC 2.0. The Go stdlib has no LSP library — need to implement the framing (`Content-Length: N\r\n\r\n` + JSON body) manually. This is not much code (~100 lines) and keeps the zero-external-deps rule.
-
-**Key files:** new `cmd/aura-lsp/main.go`, new `pkg/lsp/` package (or directly in cmd)
+Potential next steps to improve the Go-source compiler:
+- Support `import` statements (emit Go `import` declarations)
+- Support method definitions on structs (`impl` blocks)
+- More complete stdlib mapping (e.g. `append`, `len` on typed collections)
+- Error propagation with `?` operator
+- Pattern matching (`match`) in emitted Go (currently skipped)
