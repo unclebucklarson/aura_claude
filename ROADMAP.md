@@ -418,14 +418,14 @@ Phase 4 delivers a complete runtime and standard library for Aura:
 - [ ] Automatic spec validation for AI-generated code
 - [ ] Structured output format for AI consumption
 
-### 5.4 Documentation Generator
+### 5.4 Documentation Generator ✅ COMPLETE (v1.1.0-alpha.1)
 
-**Complexity:** Low-Medium | **Estimate:** 1–2 weeks
-
-- [ ] Extract doc comments (`##`) from source files
-- [ ] Generate HTML/Markdown documentation from AST
-- [ ] Include type signatures, effects, and spec information
-- [ ] Cross-reference linking between modules
+- [x] Extract `##` doc comments from source files via parser (new `collectDocComments` pass)
+- [x] Generate Markdown documentation from AST — functions, types, structs, enums, traits, specs
+- [x] Include type signatures, effects, constraints, and spec information
+- [x] `--json` flag for structured AI-parseable output
+- [x] `aura doc [--json] <file>` CLI command
+- [x] `pkg/docgen` package — 12 tests
 
 ### 5.5 REPL
 
@@ -660,3 +660,4 @@ See [DEVELOPMENT.md](DEVELOPMENT.md) for setup instructions, architecture overvi
 | 2026-03-24 | v1.0.0-alpha.3 | **Phase 3.3 Chunk 3** — Type constraints: `TypeConstraint` AST, `parseWhereConstraints`, WHERE guard for refinements, `fnConstraints` map, `validateConstraintDeclarations`, `ErrConstraintNotSatisfied`, call-site enforcement in `inferCallExpr`, 24 new tests (1096 total) |
 | 2026-03-24 | v1.0.0 | **Phase 3.3 Chunk 4** — Improved type inference: `inferExprWithHint`, empty collection inference, `Some/Ok/Err` bidirectional checking, generic type aliases documented, 24 new tests (1120 total) |
 | 2026-03-24 | v1.0.0 | **Issue #11** — String concat O(n²) fixed: `collectConcatLeaves` + `evalConcatChain` in eval.go, 1 new test (1121 total). No open debt remaining. |
+| 2026-03-24 | v1.1.0-alpha.1 | **Phase 5.4** — Documentation Generator: `pkg/docgen`, `aura doc [--json]`, parser doc-comment attachment (`collectDocComments`, `skipNewlinesKeepDoc`), 12 new tests (1133 total) |

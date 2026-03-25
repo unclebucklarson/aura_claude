@@ -114,6 +114,53 @@ func (p *Parser) skipNewlines() {
         }
 }
 
+// skipNewlinesKeepDoc skips NEWLINE and COMMENT tokens but leaves DOC_COMMENT
+// tokens in the stream so collectDocComments can pick them up.
+func (p *Parser) skipNewlinesKeepDoc() {
+        for p.check(token.NEWLINE) || p.check(token.COMMENT) {
+                p.advance()
+        }
+}
+
+// collectDocComments advances past newlines, regular comments, and doc comments,
+// returning any ## doc comment tokens encountered as ast.Comment values.
+// Called before parsing each top-level item so doc comments attach to the node.
+func (p *Parser) collectDocComments() []ast.Comment {
+        var comments []ast.Comment
+        for p.check(token.NEWLINE) || p.check(token.COMMENT) || p.check(token.DOC_COMMENT) {
+                tok := p.current()
+                if tok.Type == token.DOC_COMMENT {
+                        comments = append(comments, ast.Comment{
+                                Text:  tok.Literal,
+                                IsDoc: true,
+                        })
+                }
+                p.advance()
+        }
+        return comments
+}
+
+// attachDocComments sets the Comments field on a top-level AST item.
+func attachDocComments(item ast.TopLevelItem, comments []ast.Comment) {
+        if len(comments) == 0 {
+                return
+        }
+        switch n := item.(type) {
+        case *ast.FnDef:
+                n.Comments = append(comments, n.Comments...)
+        case *ast.StructDef:
+                n.Comments = append(comments, n.Comments...)
+        case *ast.EnumDef:
+                n.Comments = append(comments, n.Comments...)
+        case *ast.TraitDef:
+                n.Comments = append(comments, n.Comments...)
+        case *ast.TypeDef:
+                n.Comments = append(comments, n.Comments...)
+        case *ast.ImplBlock:
+                n.Comments = append(comments, n.Comments...)
+        }
+}
+
 func (p *Parser) expectNewline() {
         if p.blockExprDepth > 0 {
                 p.blockExprDepth--
@@ -146,7 +193,7 @@ func (p *Parser) parseModule() *ast.Module {
                 p.advance()
                 module.Name = p.parseQualifiedName()
                 p.expectNewline()
-                p.skipNewlines()
+                p.skipNewlinesKeepDoc()
         }
 
         // Parse imports
@@ -155,17 +202,18 @@ func (p *Parser) parseModule() *ast.Module {
                 if imp != nil {
                         module.Imports = append(module.Imports, imp)
                 }
-                p.skipNewlines()
+                p.skipNewlinesKeepDoc()
         }
 
         // Parse top-level items
         for !p.check(token.EOF) {
-                p.skipNewlines()
+                docComments := p.collectDocComments()
                 if p.check(token.EOF) {
                         break
                 }
                 item := p.parseTopLevelItem()
                 if item != nil {
+                        attachDocComments(item, docComments)
                         module.Items = append(module.Items, item)
                 }
                 p.skipNewlines()
