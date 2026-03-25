@@ -38,10 +38,11 @@ For the full AI-first mission and design philosophy, see [AI_MISSION.md](../AI_M
 8. [Pattern Matching](#pattern-matching)
 9. [Expressions](#expressions)
 10. [Traits & Implementations](#traits--implementations)
-11. [Specs (Specifications)](#specs-specifications)
-12. [Effect System](#effect-system)
-13. [Tests](#tests)
-14. [Comments](#comments)
+11. [Type Constraints](#type-constraints)
+12. [Specs (Specifications)](#specs-specifications)
+13. [Effect System](#effect-system)
+14. [Tests](#tests)
+15. [Comments](#comments)
 
 ---
 
@@ -84,6 +85,30 @@ type Email = String where self matches r"^[^@]+@[^@]+\.[^@]+$"
 ```
 
 Refinement predicates are checked at compile time when possible, and at runtime otherwise.
+
+### Generic Type Parameters
+
+Types and structs can be parameterized with type variables:
+
+```aura
+type Maybe[T] = Option[T]
+type Wrapper[T] = [T]
+
+pub struct Pair[A, B]:
+    pub first: A
+    pub second: B
+
+pub enum Tree[T]:
+    Leaf(T)
+    Node(Tree[T], Tree[T])
+```
+
+Instantiate generic types by supplying concrete type arguments:
+
+```aura
+let p: Pair[String, Int] = Pair(first: "age", second: 30)
+let names: Wrapper[String] = ["alice", "bob"]
+```
 
 ### Union Types (String Literals)
 
@@ -187,6 +212,31 @@ pub fn save(task: Task) -> Result[Task, Error] with db, log:
     log.info("Saving task: {task.id}")
     db.insert("tasks", task)
     return Ok(task)
+```
+
+### Generic Functions
+
+Functions can declare type parameters in square brackets:
+
+```aura
+fn identity[T](x: T) -> T:
+    return x
+
+fn first[T](xs: [T]) -> Option[T]:
+    if len(xs) == 0:
+        return None
+    return Some(xs[0])
+
+fn zip[A, B](a: A, b: B) -> Pair[A, B]:
+    return Pair(first: a, second: b)
+```
+
+The type arguments are inferred at the call site — you never write them explicitly:
+
+```aura
+let n = identity(42)          # T inferred as Int
+let s = identity("hello")     # T inferred as String
+let head = first([1, 2, 3])   # T inferred as Int → Option[Int]
 ```
 
 ### Satisfies Clause
@@ -418,6 +468,56 @@ Add methods directly to a type:
 impl Task:
     fn is_complete(self) -> Bool:
         return self.status == "done"
+```
+
+### Calling Methods via Impl
+
+Impl methods are called with dot notation. The receiver is passed automatically:
+
+```aura
+impl Task:
+    fn is_overdue(self, now: String) -> Bool:
+        return self.due_date < now
+
+let t = Task(id: "1", title: "Write tests", due_date: "2026-01-01")
+let overdue = t.is_overdue("2026-03-24")   # true
+```
+
+---
+
+## Type Constraints
+
+Generic functions can require that type parameters implement a specific trait using `where` clauses:
+
+```aura
+trait Printable:
+    fn display(self) -> String
+
+fn print_all[T](items: [T]) -> None where T: Printable:
+    for item in items:
+        print(item.display())
+```
+
+Multiple constraints are separated by commas:
+
+```aura
+trait Serializable:
+    fn to_json(self) -> String
+
+fn log_and_save[T](item: T) -> None where T: Printable, T: Serializable:
+    print(item.display())
+    db.insert(item.to_json())
+```
+
+The compiler enforces constraints at every call site. Passing a type that doesn't implement the required trait is a compile error:
+
+```aura
+struct Point:
+    x: Int
+    y: Int
+
+# Error: Point does not implement Printable
+print_all([Point(x: 1, y: 2)])
 ```
 
 ---

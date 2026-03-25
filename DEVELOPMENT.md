@@ -279,9 +279,7 @@ go tool cover -html=coverage.out
 #### Future Enhancements (deferred to later phases)
 
 ```
-[ ] Import resolution across modules
 [ ] Refinement predicate evaluation at compile time
-[ ] Generic type parameter instantiation
 [ ] Transitive effect closure via call graph
 [ ] Lambda parameter type inference from context
 [ ] ? propagation operator type checking
@@ -473,6 +471,98 @@ go tool cover -html=coverage.out
 [x] assert_env_var(key, expected)
 [x] mock_time(timestamp), advance_time(seconds), get_mock_time()
 [x] reset_effects(), get_env(key)
+```
+
+### Phase 3.2: Advanced Pattern Matching ✅ COMPLETE (v0.9.0)
+
+> 4 chunks delivering exhaustive pattern matching. 112 new tests — 994 total.
+
+```
+[x] MatchExpr AST node + evalMatchExpr in interpreter
+[x] Pattern kinds: literal, variable, wildcard, tuple, list (head::tail, spread),
+    constructor (EnumVariant(fields)), or-patterns (pat1 | pat2), binding (pat as name)
+[x] Guard clauses: case pat if condition
+[x] Exhaustiveness checking for enum and Bool types (ErrNonExhaustiveMatch)
+[x] inferMatchExpr — type inference for match expressions
+[x] patternCoversVariants — static analysis of covered enum variants
+```
+
+### Issue #8: Refinement Type Runtime Enforcement ✅ COMPLETE (v0.9.1)
+
+```
+[x] enforceRefinement() in interpreter — evaluates where-predicates at runtime
+[x] Panic on refinement violation with structured error output
+[x] 10 new tests — 1004 total
+```
+
+### Phase 3.1.1: Tuples ✅ COMPLETE (v0.8.1)
+
+```
+[x] Tuple literal syntax: (a, b, c)
+[x] Tuple destructuring in let bindings
+[x] 12 tuple methods (fst, snd, swap, to_list, zip, unzip, map_fst, map_snd, ...)
+[x] 34 new tests — 905 total
+```
+
+### Phase 3.3: Advanced Type Features ✅ COMPLETE (v1.0.0)
+
+> 4 chunks adding generics, interfaces, constraints, and improved inference. 116 new tests — 1120 total.
+
+#### Chunk 1 — Generic Types and Functions
+```
+[x] SubstituteTypeParams on *types.Type — recursive substitution
+[x] withTypeParams helper on Checker — activates type param scope
+[x] collectTypeBindings — infers type arg mappings from call-site arguments
+[x] resolveNamedType checks active type param bindings before registry lookup
+[x] Generic struct/enum instantiation (Pair[Int, String]) with full field substitution
+[x] inferCallExpr infers and substitutes return type for generic calls
+[x] IsAssignableTo: TypeParam treated as Any (type erasure), List/Set/Option covariance
+```
+
+#### Chunk 2 — Interface Types
+```
+[x] KindInterface + NewInterfaceType in pkg/types/types.go
+[x] registerTraitDef builds KindInterface type with method fields
+[x] Impl methods registered as "TypeName.methodName" (qualified, collision-free)
+[x] validateImplBlocks pass — checks all required trait methods are implemented
+[x] structSatisfiesInterface — structural satisfaction check
+[x] implMethods map on Environment + DefineImplMethod/GetImplMethod helpers
+[x] evalFieldAccess dispatches to impl methods via BuiltinFnVal closures
+[x] Inherent impl Type: blocks (no trait) work identically
+[x] ErrMissingMethod error code
+```
+
+#### Chunk 3 — Type Constraints and `where` Clauses
+```
+[x] TypeConstraint struct {TypeParam, TraitName} in pkg/ast/ast.go
+[x] Constraints []TypeConstraint on FnDef and FnSignature
+[x] parseWhereConstraints() — comma-separated T: TraitName after effects
+[x] Disambiguation guard in parseOptionOrRefinementType — WHERE TYPE_IDENT COLON
+    pattern left for parseFnDef (not a refinement predicate)
+[x] fnConstraints map[string][]ast.TypeConstraint on Checker
+[x] validateConstraintDeclarations() pass (Pass 3.6)
+[x] Constraint checking at call sites in inferCallExpr
+[x] ErrConstraintNotSatisfied error code
+```
+
+#### Chunk 4 — Improved Type Inference
+```
+[x] inferExprWithHint(expr, hint) — targeted bidirectional inference
+[x] Empty [] with [T] annotation → infers correct element type
+[x] Empty {} with {K:V} annotation → infers key/value types
+[x] Some(x) with Option[T] annotation → checks x against T
+[x] Ok(x)/Err(x) with Result[T,E] annotation → checks argument types
+[x] checkLetStmt resolves annotation first, passes as hint
+[x] Generic type aliases (type Maybe[T] = Option[T]) — machinery already present; tests document behavior
+```
+
+### Issue #11: String Concatenation O(n²) ✅ COMPLETE (v1.0.0)
+
+```
+[x] collectConcatLeaves — walks left-associative + spine, returns all leaf exprs
+[x] evalConcatChain — evaluates leaves once, builds with strings.Builder for strings,
+    falls back to left-fold via evalAdd for non-string types
+[x] Intercepts chains of 3+ operands before general evalBinaryOp evaluation
 ```
 
 ---

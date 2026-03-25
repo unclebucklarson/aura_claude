@@ -366,9 +366,22 @@ type Name [type_params] = type_expr
 ### Function
 
 ```aura
-[pub] fn name[type_params](params) [-> ReturnType] [with effects] [satisfies SpecName]:
+[pub] fn name[type_params](params) [-> ReturnType] [with effects] [satisfies SpecName] [where T: Trait, ...]:
     body
 ```
+
+**Where clauses** constrain type parameters to types that implement a given trait:
+
+```aura
+fn show[T](x: T) -> String where T: Printable:
+    return x.display()
+
+fn process[T](items: [T]) -> None with log where T: Printable, T: Serializable:
+    for item in items:
+        log.info(item.display())
+```
+
+Type arguments are always inferred at the call site — never written explicitly by the caller.
 
 ### Trait
 
