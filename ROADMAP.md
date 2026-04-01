@@ -229,8 +229,8 @@ The tree-walk interpreter is the **highest-impact next step** for the AI-first m
 - [x] **Chunk 2: Interface types** — structural typing via `KindInterface`, `validateImplBlocks`, impl method dispatch, `structSatisfiesInterface`, qualified method names, inherent impls, runtime method dispatch via `evalFieldAccess` (v1.0.0-alpha.2, +28 tests)
 - [x] **Chunk 3: Type constraints and `where` clauses** — `TypeConstraint` AST node, `parseWhereConstraints`, disambiguation guard for refinements, `fnConstraints` map, `validateConstraintDeclarations` pass, `ErrConstraintNotSatisfied`, call-site enforcement via `inferCallExpr` (v1.0.0-alpha.3, +24 tests)
 - [x] **Chunk 4: Improved type inference** — `inferExprWithHint`, annotation-guided empty collection inference, bidirectional constructor inference (`Some/Ok/Err` argument type checking), generic type alias tests (`type Maybe[T] = Option[T]`, `type Wrapper[T] = [T]`) (v1.0.0, +24 tests) — `TypeConstraint` AST node, `parseWhereConstraints`, disambiguation guard for refinements, `fnConstraints` map, `validateConstraintDeclarations` pass, `ErrConstraintNotSatisfied`, call-site enforcement via `inferCallExpr` (v1.0.0-alpha.3, +24 tests)
-- [ ] Chunk 3: Type constraints (`where` clauses for generics)
-- [ ] Chunk 4: Improved type inference (bidirectional, empty collection inference)
+- [x] Chunk 3: Type constraints (`where` clauses for generics) — complete, see above
+- [x] Chunk 4: Improved type inference (bidirectional, empty collection inference) — complete, see above
 - [ ] Higher-kinded types (deferred — only if stdlib demands it)
 - [ ] Refinement type static evaluation (deferred from Phase 2)
 
