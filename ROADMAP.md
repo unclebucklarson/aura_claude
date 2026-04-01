@@ -532,15 +532,15 @@ Emit valid Go source from the Aura AST, then invoke the Go toolchain to produce 
 
 Design and implement a stack-based intermediate representation (IR) and bytecode compiler.
 
-- [ ] Design stack-based bytecode instruction set
-- [ ] Implement compiler from typed AST to bytecode IR
-- [ ] Constant pool for literals, identifiers, and type info
-- [ ] Symbol table generation for functions, closures, and modules
-- [ ] Function/closure compilation with upvalue capture
-- [ ] Module-level bytecode compilation
-- [ ] Debug information embedding (source locations, variable names)
+- [x] Design stack-based bytecode instruction set (~60 opcodes, fixed 3-byte encoding)
+- [x] Implement compiler from typed AST to bytecode IR (`pkg/compiler`)
+- [x] Constant pool for literals, identifiers, and type info
+- [x] Symbol table generation for functions, closures, and modules
+- [x] Function/closure compilation with upvalue capture
+- [x] Module-level bytecode compilation
+- [x] Debug information embedding (source locations, variable names)
 - [ ] Bytecode serialization/deserialization (`.aurac` files)
-- [ ] Bytecode disassembler for inspection and debugging
+- [x] Bytecode disassembler for inspection and debugging
 
 **Package:** `pkg/compiler`
 

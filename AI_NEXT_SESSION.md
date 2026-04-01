@@ -9,13 +9,14 @@
 | | |
 |--|--|
 | **Version** | v2.0.1 |
-| **Tests** | 1193 (all passing) |
-| **Phases complete** | 1, 2, 3.1, 3.1.1, 3.2, 3.3, 4, Issue #8, Issue #11, Phase 5 (all sub-items ✅), Phase 6.1 ✅ |
+| **Tests** | 1221 (all passing) |
+| **Phases complete** | 1, 2, 3.1, 3.1.1, 3.2, 3.3, 4, Issue #8, Issue #11, Phase 5 (all sub-items ✅), Phase 6.1 ✅, Phase 6.2 (core ✅) |
 
 | Package | Tests |
 |---------|-------|
 | pkg/checker | 129 |
 | pkg/codegen | 13 |
+| pkg/compiler | 28 |
 | pkg/docgen | 12 |
 | pkg/formatter | 9 |
 | pkg/goemit | 14 |
@@ -49,27 +50,66 @@ Every example in the file uses completely wrong syntax: curly-brace blocks `fn f
 - Apply similarly to top-level function calls and type references across module boundaries
 - Add ~20 tests using two-module programs (requires multi-module checker to exist first)
 
-### 3. ROADMAP.md §3.3 — stale checkboxes (5 minutes)
+---
 
-Phase 3.3 Chunks 3 and 4 are complete but still show as `[ ]` unchecked in ROADMAP.md. Fix this to keep the roadmap honest.
+## Next Major: Phase 6.3 — Bytecode VM
+
+Phase 6.2 (bytecode compiler) is now complete. `pkg/compiler` produces a `Chunk` IR from any Aura AST. See ROADMAP §6.3 for the VM scope.
+
+**Phase 6.3 scope** (`pkg/vm`):
+- Call frame stack, operand stack management
+- Dispatch loop executing all opcodes defined in `pkg/compiler/opcode.go`
+- Upvalue capture and closure execution
+- Method dispatch (delegate to interpreter's method registry or re-implement)
+- Effect system integration (pass EffectContext through VM calls)
+- Integration with `aura run` command (as alternative to tree-walk interpreter)
+
+**Key design decision:** The VM consumes the `*compiler.Chunk` IR directly. It does not re-parse or re-check. The interpreter remains as a fallback for development until the VM covers 100% of features.
+
+**Architecture note:** The VM will be a separate package `pkg/vm`. It needs access to:
+- `pkg/compiler` (chunk, opcode, constants)
+- `pkg/interpreter` value types (`Value`, `ListValue`, `MapValue`, etc.) — OR define its own value representation
+
+The simplest approach is to **reuse interpreter value types** to avoid reimplementing the entire runtime. The VM becomes a new execution engine for the same value domain.
 
 ---
 
-## Next Major: Phase 6.2 — Bytecode Compiler
+## Phase 6.2 Summary — Completed This Session
 
-After the debt above is cleared, the primary engineering priority is the bytecode compiler.
+**What was built:** `pkg/compiler` — a complete bytecode compiler from typed Aura AST to a stack-based IR.
 
-The primary compilation path going forward is **bytecode → VM** (development) and **bytecode → LLVM** (production). The Go-source compiler (6.1) provides a working `aura build` today; 6.2–6.4 are the real compiler stack.
+**Files added:**
+- `pkg/compiler/opcode.go` — 60 opcodes, fixed 3-byte instruction format, ReadArg/WriteArg helpers
+- `pkg/compiler/chunk.go` — Chunk, Constant, UpvalueDesc, LocalInfo, SourceMapEntry
+- `pkg/compiler/disassembler.go` — human-readable bytecode listing, nested chunk expansion
+- `pkg/compiler/compiler.go` — Compiler struct + CompileModule() + all compileXxx methods
+- `pkg/compiler/compiler_test.go` — 28 tests covering all major constructs
 
-**Phase 6.2 scope** (`pkg/compiler`):
-- Stack-based bytecode instruction set design
-- Compiler from typed AST to bytecode IR
-- Constant pool, symbol table, function/closure compilation
-- Bytecode serialization (`.aurac` files) and disassembler
+**What the compiler handles:**
+- All literal types (int, float, bool, string, string interpolation, none)
+- All binary/unary operators including short-circuit and/or
+- Local variables, globals, upvalue capture (closures)
+- if/elif/else statements and if expressions
+- match statements and match expressions (patterns: wildcard, binding, literal, constructor, or, list)
+- for/while loops, break/continue
+- let bindings, assignment to locals/globals/fields/indices
+- Function definitions and lambda expressions
+- List, map, tuple construction and comprehensions
+- Field access, index access, optional chaining, option propagate (?)
+- Pipeline operator (|>)
+- Some/None/Ok/Err constructors
+- Struct construction
+- Assert statements
 
-**Key design decision:** Settle the instruction set before writing any VM or LLVM code — both 6.3 and 6.4 consume the same IR. See `ROADMAP.md` §6.2 for full checklist.
+**Remaining 6.2 item:** Bytecode serialization (`.aurac` files) — deferred to a future session as it requires a wire format design decision.
 
 ---
+
+## Recent: docs / examples (v2.0.1)
+
+- **`docs/introduction_to_programming_with_aura.md`** — full rewrite: 4 tutorials, all programs verified to run, correct lambda syntax (`|x| -> expr`), import aliases, new Tutorial 4 on structs and Option
+- **`user_docs/examples.md`** — complete syntax rewrite (curly-brace → colon+indent, `//` → `#`, `|x| expr` → `|x| -> expr`)
+- **ROADMAP.md §3.3** — stale checkboxes fixed
 
 ## Recent: Polish (v2.0.1)
 
@@ -77,4 +117,3 @@ The primary compilation path going forward is **bytecode → VM** (development) 
 - **`std.io`** — added `io.read_line() -> Option[String]` and `io.input(prompt?) -> String` (stdin reading)
 - **`std.env`** — added `env.exit(code?)` for process termination; `env.args()` now returns only user-supplied args (toolchain prefix stripped via `NewRealEnvProvider`)
 - **Method aliases removed** — `String.length/to_upper/to_lower`, `List.length`, `Map.length/size` all removed; canonical: `len`, `upper`, `lower`
-- **`docs/introduction_to_programming_with_aura.md`** — full rewrite: 4 tutorials, all programs verified to run, correct lambda syntax (`|x| -> expr`), import aliases, new Tutorial 4 on structs and Option
