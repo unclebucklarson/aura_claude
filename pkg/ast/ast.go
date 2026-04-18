@@ -580,18 +580,20 @@ func (n *AssertStmt) nodeType() string    { return "AssertStmt" }
 func (n *AssertStmt) GetSpan() token.Span { return n.Span }
 func (n *AssertStmt) isStatement()        {}
 
-// BreakStmt represents "break".
+// BreakStmt represents "break" or "break label".
 type BreakStmt struct {
-        Span token.Span
+	Span  token.Span
+	Label *string
 }
 
 func (n *BreakStmt) nodeType() string    { return "BreakStmt" }
 func (n *BreakStmt) GetSpan() token.Span { return n.Span }
 func (n *BreakStmt) isStatement()        {}
 
-// ContinueStmt represents "continue".
+// ContinueStmt represents "continue" or "continue label".
 type ContinueStmt struct {
-        Span token.Span
+	Span  token.Span
+	Label *string
 }
 
 func (n *ContinueStmt) nodeType() string    { return "ContinueStmt" }

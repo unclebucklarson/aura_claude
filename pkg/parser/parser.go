@@ -1187,16 +1187,28 @@ func (p *Parser) parseStatement() ast.Statement {
                 return p.parseForStmt()
         case token.WHILE:
                 return p.parseWhileStmt()
-        case token.BREAK:
-                start := p.current().Pos
-                p.advance()
-                p.expectNewline()
-                return &ast.BreakStmt{Span: p.makeSpan(start)}
-        case token.CONTINUE:
-                start := p.current().Pos
-                p.advance()
-                p.expectNewline()
-                return &ast.ContinueStmt{Span: p.makeSpan(start)}
+	case token.BREAK:
+		start := p.current().Pos
+		p.advance()
+		var label *string
+		if p.current().Type == token.IDENT {
+			labelStr := p.current().Literal
+			label = &labelStr
+			p.advance()
+		}
+		p.expectNewline()
+		return &ast.BreakStmt{Span: p.makeSpan(start), Label: label}
+	case token.CONTINUE:
+		start := p.current().Pos
+		p.advance()
+		var label *string
+		if p.current().Type == token.IDENT {
+			labelStr := p.current().Literal
+			label = &labelStr
+			p.advance()
+		}
+		p.expectNewline()
+		return &ast.ContinueStmt{Span: p.makeSpan(start), Label: label}
         case token.ASSERT:
                 return p.parseAssertStmt()
         case token.WITH:
